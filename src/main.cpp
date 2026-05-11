@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
     while (true) {
         std::cout << "\nSelect SOURCE audio device (Loopback): ";
         if (std::cin >> sourceChoice && sourceChoice >= 1 && sourceChoice <= playbackCount) break;
-        std::cout << "Invalid input. Please enter a valid number.\n";
+        std::cout << "Invalid choice. Please enter a valid number.\n";
         std::cin.clear();
         std::cin.ignore(10000, '\n');
     }
@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
     while (true) {
         std::cout << "Select Mode for TARGET device: ";
         if (std::cin >> modeChoice && (modeChoice == 1 || modeChoice == 2)) break;
-        std::cout << "Invalid input. Please enter 1 or 2.\n";
+        std::cout << "Invalid choice. Please enter 1 or 2.\n";
         std::cin.clear();
         std::cin.ignore(10000, '\n');
     }
