@@ -195,28 +195,26 @@ int main(int argc, char** argv) {
     }
     
     appData.sourceChannels = sourceDevice.capture.channels;
+    
+    std::cout << "\nSource Loopback successfully initialized at " << sourceDevice.sampleRate << " Hz\n";
 
     ma_device_config targetConfig = ma_device_config_init(ma_device_type_playback);
     targetConfig.playback.pDeviceID = &targetDeviceId;
     targetConfig.playback.format = ma_format_f32;
     // Set to same sample rate to minimize resampling issues, or default
-    targetConfig.sampleRate = sourceDevice.sampleRate; 
+    targetConfig.sampleRate = sourceDevice.sampleRate;
     targetConfig.playback.shareMode = shareMode;
     targetConfig.periodSizeInMilliseconds = targetLatency;
     targetConfig.dataCallback = playback_callback;
     targetConfig.pUserData = &appData;
 
     if (ma_device_init(&context, &targetConfig, &targetDevice) != MA_SUCCESS) {
-        std::cerr << "Failed to init target device. Trying fallback...\n";
-        targetConfig.sampleRate = 48000;
-        if (ma_device_init(&context, &targetConfig, &targetDevice) != MA_SUCCESS) {
-            std::cerr << "Failed to init target device entirely.\n";
-            cleanup(&sourceDevice, NULL, &appData);
-            ma_context_uninit(&context);
-            return -1;
-        }
+        std::cerr << "Failed to init target device.\n";
+        cleanup(&sourceDevice, NULL, &appData);
+        ma_context_uninit(&context);
+        return -1;
     }
-    
+
     appData.targetChannels = targetDevice.playback.channels;
 
     // Restart ring buffer with accurate target channels
