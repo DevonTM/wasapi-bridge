@@ -1,0 +1,240 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#include <windows.h>
+
+#include "miniaudio.h"
+
+struct ApplicationData {
+    ma_pcm_rb ringBuffer;
+    ma_uint32 sourceChannels;
+    ma_uint32 targetChannels;
+};
+
+std::atomic<bool> g_keepRunning{true};
+
+BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType) {
+    if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_CLOSE_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
+        g_keepRunning = false;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void cleanup(ma_device* sourceDevice, ma_device* targetDevice, ApplicationData* appData) {
+    if (sourceDevice) ma_device_uninit(sourceDevice);
+    if (targetDevice) ma_device_uninit(targetDevice);
+    if (appData) ma_pcm_rb_uninit(&appData->ringBuffer);
+}
+
+void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
+    (void)pOutput;
+    ApplicationData* appData = (ApplicationData*)pDevice->pUserData;
+    if (pInput == nullptr) return;
+
+    ma_uint32 framesToWrite = frameCount;
+    ma_uint32 framesAvailable = ma_pcm_rb_available_write(&appData->ringBuffer);
+    if (framesToWrite > framesAvailable) {
+        framesToWrite = framesAvailable;
+    }
+
+    if (framesToWrite > 0) {
+        void* pWriteBuffer;
+        ma_pcm_rb_acquire_write(&appData->ringBuffer, &framesToWrite, &pWriteBuffer);
+        
+        // Copy logic for source -> target mapping
+        float* pSrc = (float*)pInput;
+        float* pDst = (float*)pWriteBuffer;
+        
+        for (ma_uint32 i = 0; i < framesToWrite; ++i) {
+            for (ma_uint32 c = 0; c < appData->targetChannels; ++c) {
+                if (c < appData->sourceChannels) {
+                    float sample = pSrc[i * appData->sourceChannels + c];
+                    // Handle peak clipping correctly (Hard clamp to valid float audio range [-1.0, 1.0])
+                    pDst[i * appData->targetChannels + c] = std::clamp(sample, -1.0f, 1.0f);
+                } else {
+                    pDst[i * appData->targetChannels + c] = 0.0f;
+                }
+            }
+        }
+        
+        ma_pcm_rb_commit_write(&appData->ringBuffer, framesToWrite);
+    }
+}
+
+void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
+    (void)pInput;
+    ApplicationData* appData = (ApplicationData*)pDevice->pUserData;
+    if (pOutput == nullptr) return;
+
+    ma_uint32 framesToRead = frameCount;
+    ma_uint32 framesAvailable = ma_pcm_rb_available_read(&appData->ringBuffer);
+    
+    if (framesToRead > framesAvailable) {
+        // Not enough data. Just read what's available and zero the rest if we wanted.
+        framesToRead = framesAvailable;
+    }
+
+    float* pDst = (float*)pOutput;
+    
+    if (framesToRead > 0) {
+        void* pReadBuffer;
+        ma_pcm_rb_acquire_read(&appData->ringBuffer, &framesToRead, &pReadBuffer);
+        
+        float* pSrc = (float*)pReadBuffer;
+        for (ma_uint32 i = 0; i < framesToRead * appData->targetChannels; ++i) {
+            pDst[i] = pSrc[i];
+        }
+        
+        ma_pcm_rb_commit_read(&appData->ringBuffer, framesToRead);
+    }
+
+    // Fill remainder with zeroes stringently (handle underflow)
+    if (framesToRead < frameCount) {
+        ma_uint32 zeroes = (frameCount - framesToRead) * appData->targetChannels;
+        for(ma_uint32 i = 0; i < zeroes; i++) {
+            pDst[framesToRead * appData->targetChannels + i] = 0.0f;
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    std::cout << "Starting WASAPI Bridge...\n";
+
+    ma_context context;
+    ma_backend backend = ma_backend_wasapi;
+    if (ma_context_init(&backend, 1, NULL, &context) != MA_SUCCESS) {
+        std::cerr << "Failed to initialize standard WASAPI context.\n";
+        return -1;
+    }
+
+    ma_device_info* pPlaybackInfos;
+    ma_uint32 playbackCount;
+    if (ma_context_get_devices(&context, &pPlaybackInfos, &playbackCount, NULL, NULL) != MA_SUCCESS) {
+        std::cerr << "Failed to enumerate devices.\n";
+        ma_context_uninit(&context);
+        return -1;
+    }
+
+    std::cout << "\nAvailable Playback Devices:\n";
+    for (ma_uint32 i = 0; i < playbackCount; ++i) {
+        std::cout << i + 1 << ". " << pPlaybackInfos[i].name << "\n";
+    }
+
+    int sourceChoice = 0;
+    while (true) {
+        std::cout << "\nSelect SOURCE audio device (Loopback): ";
+        if (std::cin >> sourceChoice && sourceChoice >= 1 && sourceChoice <= playbackCount) break;
+        std::cout << "Invalid input. Please enter a valid number.\n";
+        std::cin.clear();
+        std::cin.ignore(10000, '\n');
+    }
+
+    int targetChoice = 0;
+    while (true) {
+        std::cout << "Select TARGET audio device (Output): ";
+        if (std::cin >> targetChoice && targetChoice >= 1 && targetChoice <= playbackCount) break;
+        std::cout << "Invalid input. Please enter a valid number.\n";
+        std::cin.clear();
+        std::cin.ignore(10000, '\n');
+    }
+
+    ma_device_id sourceDeviceId = pPlaybackInfos[sourceChoice - 1].id;
+    ma_device_id targetDeviceId = pPlaybackInfos[targetChoice - 1].id;
+
+    std::cout << "\nWASAPI Modes:\n1. Shared\n2. Exclusive\n";
+    int modeChoice = 0;
+    while (true) {
+        std::cout << "Select Mode for TARGET device: ";
+        if (std::cin >> modeChoice && (modeChoice == 1 || modeChoice == 2)) break;
+        std::cout << "Invalid input. Please enter 1 or 2.\n";
+        std::cin.clear();
+        std::cin.ignore(10000, '\n');
+    }
+    ma_share_mode shareMode = (modeChoice == 2) ? ma_share_mode_exclusive : ma_share_mode_shared;
+
+    uint32_t targetLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 20;
+    std::cout << "\nEnter desired target latency in milliseconds (default " << targetLatency << "): ";
+    std::string latencyInput;
+    std::cin.ignore();
+    std::getline(std::cin, latencyInput);
+    if (!latencyInput.empty()) {
+        try { targetLatency = std::stoi(latencyInput); } catch(...) {}
+    }
+
+    ma_device sourceDevice;
+    ma_device targetDevice;
+    ApplicationData appData = {};
+
+    // Get source device info for channel/sample rate matching
+    ma_device_info sourceInfo = pPlaybackInfos[sourceChoice - 1];
+    
+    // For simplicity, hardcoded default sample rate, but we can extract more using an intermediary dummy device or context info.
+    appData.sourceChannels = 2; // Default, actual channels handled by device config
+    appData.targetChannels = 2;
+
+    ma_pcm_rb_init(ma_format_f32, appData.targetChannels, 44100 * 2, NULL, NULL, &appData.ringBuffer); // 2 second buffer
+
+    ma_device_config sourceConfig = ma_device_config_init(ma_device_type_loopback);
+    sourceConfig.capture.pDeviceID = &sourceDeviceId;
+    sourceConfig.capture.format = ma_format_f32;
+    sourceConfig.dataCallback = capture_callback;
+    sourceConfig.pUserData = &appData;
+
+    if (ma_device_init(&context, &sourceConfig, &sourceDevice) != MA_SUCCESS) {
+        std::cerr << "Failed to init source loopback device\n";
+        cleanup(NULL, NULL, &appData);
+        ma_context_uninit(&context);
+        return -1;
+    }
+    
+    appData.sourceChannels = sourceDevice.capture.channels;
+
+    ma_device_config targetConfig = ma_device_config_init(ma_device_type_playback);
+    targetConfig.playback.pDeviceID = &targetDeviceId;
+    targetConfig.playback.format = ma_format_f32;
+    // Set to same sample rate to minimize resampling issues, or default
+    targetConfig.sampleRate = sourceDevice.sampleRate; 
+    targetConfig.playback.shareMode = shareMode;
+    targetConfig.periodSizeInMilliseconds = targetLatency;
+    targetConfig.dataCallback = playback_callback;
+    targetConfig.pUserData = &appData;
+
+    if (ma_device_init(&context, &targetConfig, &targetDevice) != MA_SUCCESS) {
+        std::cerr << "Failed to init target device. Trying fallback...\n";
+        targetConfig.sampleRate = 48000;
+        if (ma_device_init(&context, &targetConfig, &targetDevice) != MA_SUCCESS) {
+            std::cerr << "Failed to init target device entirely.\n";
+            cleanup(&sourceDevice, NULL, &appData);
+            ma_context_uninit(&context);
+            return -1;
+        }
+    }
+    
+    appData.targetChannels = targetDevice.playback.channels;
+
+    // Restart ring buffer with accurate target channels
+    ma_pcm_rb_uninit(&appData.ringBuffer);
+    ma_pcm_rb_init(ma_format_f32, appData.targetChannels, sourceDevice.sampleRate * 2, NULL, NULL, &appData.ringBuffer);
+
+    std::cout << "Starting stream...\n";
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+    
+    ma_device_start(&sourceDevice);
+    ma_device_start(&targetDevice);
+
+    std::cout << "Streaming running... Press Ctrl+C or close the window to quit.\n";
+    while (g_keepRunning) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    std::cout << "\nShutting down gracefully...\n";
+    cleanup(&sourceDevice, &targetDevice, &appData);
+    ma_context_uninit(&context);
+
+    return 0;
+}
