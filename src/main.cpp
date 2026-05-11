@@ -9,6 +9,8 @@
 
 #include "miniaudio.h"
 
+#define WB_VERSION "0.0.0"
+
 struct ApplicationData {
     ma_pcm_rb ringBuffer;
     ma_uint32 sourceChannels;
@@ -103,7 +105,7 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 }
 
 int main(int argc, char** argv) {
-    std::cout << "Starting WASAPI Bridge...\n";
+    std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
 
     ma_context context;
     ma_backend backend = ma_backend_wasapi;
