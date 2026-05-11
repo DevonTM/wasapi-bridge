@@ -47,11 +47,11 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
     if (framesToWrite > 0) {
         void* pWriteBuffer;
         ma_pcm_rb_acquire_write(&appData->ringBuffer, &framesToWrite, &pWriteBuffer);
-        
+
         // Copy logic for source -> target mapping
         float* pSrc = (float*)pInput;
         float* pDst = (float*)pWriteBuffer;
-        
+
         for (ma_uint32 i = 0; i < framesToWrite; ++i) {
             for (ma_uint32 c = 0; c < appData->targetChannels; ++c) {
                 if (c < appData->sourceChannels) {
@@ -63,7 +63,7 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
                 }
             }
         }
-        
+
         ma_pcm_rb_commit_write(&appData->ringBuffer, framesToWrite);
     }
 }
@@ -75,23 +75,23 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 
     ma_uint32 framesToRead = frameCount;
     ma_uint32 framesAvailable = ma_pcm_rb_available_read(&appData->ringBuffer);
-    
+
     if (framesToRead > framesAvailable) {
         // Not enough data. Just read what's available and zero the rest if we wanted.
         framesToRead = framesAvailable;
     }
 
     float* pDst = (float*)pOutput;
-    
+
     if (framesToRead > 0) {
         void* pReadBuffer;
         ma_pcm_rb_acquire_read(&appData->ringBuffer, &framesToRead, &pReadBuffer);
-        
+
         float* pSrc = (float*)pReadBuffer;
         for (ma_uint32 i = 0; i < framesToRead * appData->targetChannels; ++i) {
             pDst[i] = pSrc[i];
         }
-        
+
         ma_pcm_rb_commit_read(&appData->ringBuffer, framesToRead);
     }
 
@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
 
     // Get source device info for channel/sample rate matching
     ma_device_info sourceInfo = pPlaybackInfos[sourceChoice - 1];
-    
+
     // For simplicity, hardcoded default sample rate, but we can extract more using an intermediary dummy device or context info.
     appData.sourceChannels = 2; // Default, actual channels handled by device config
     appData.targetChannels = 2;
@@ -193,9 +193,9 @@ int main(int argc, char** argv) {
         ma_context_uninit(&context);
         return -1;
     }
-    
+
     appData.sourceChannels = sourceDevice.capture.channels;
-    
+
     std::cout << "\nSource Loopback successfully initialized at " << sourceDevice.sampleRate << " Hz\n";
 
     ma_device_config targetConfig = ma_device_config_init(ma_device_type_playback);
@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
 
     std::cout << "Starting stream...\n";
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
-    
+
     ma_device_start(&sourceDevice);
     ma_device_start(&targetDevice);
 

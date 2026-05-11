@@ -17,17 +17,17 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 add_definitions(-DWINVER=0x0601 -D_WIN32_WINNT=0x0601)
 
 # Static linking and LTO optimizations for Release builds
-set_target_properties(${PROJECT_NAME} PROPERTIES 
+set_target_properties(${PROJECT_NAME} PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
 )
 if(MINGW)
-    target_link_options(${PROJECT_NAME} PRIVATE 
+    target_link_options(${PROJECT_NAME} PRIVATE
         -Wl,--build-id
         $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:-static>
         $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:-s>
     )
 elseif(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE 
+    target_compile_options(${PROJECT_NAME} PRIVATE
         $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:/MT>
         $<$<CONFIG:Debug>:/MTd>
     )
