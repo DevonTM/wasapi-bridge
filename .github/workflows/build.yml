@@ -1,0 +1,67 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        include:
+          - arch: Win32
+            name: x86
+          - arch: x64
+            name: x86_64
+          - arch: ARM64
+            name: arm64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Configure CMake
+      run: >
+        cmake -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }}
+        -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Set Release Version
+      shell: pwsh
+      run: |
+        $VERSION = "latest"
+        if ("${{ github.event_name }}" -eq "release") {
+          $VERSION = "${{ github.event.release.tag_name }}"
+        }
+        echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+
+    - name: Prepare and Zip Artifacts
+      shell: pwsh
+      run: |
+        $DIR = "wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}"
+        mkdir $DIR
+        Copy-Item build\Release\wasapi-bridge.exe -Destination $DIR\
+        Copy-Item LICENSE -Destination $DIR\
+        Compress-Archive -Path "$DIR" -DestinationPath "$DIR.zip"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}
+        path: wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}.zip
+
+    - name: Upload to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v2
+      with:
+        files: wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}.zip
