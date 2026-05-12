@@ -111,8 +111,11 @@ int main(int argc, char** argv) {
     std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
 
     ma_context context;
+    ma_context_config contextConfig = ma_context_config_init();
+    contextConfig.threadPriority = ma_thread_priority_realtime;
+
     ma_backend backend = ma_backend_wasapi;
-    if (ma_context_init(&backend, 1, NULL, &context) != MA_SUCCESS) {
+    if (ma_context_init(&backend, 1, &contextConfig, &context) != MA_SUCCESS) {
         std::cerr << "Failed to initialize standard WASAPI context.\n";
         return -1;
     }
