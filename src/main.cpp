@@ -105,6 +105,9 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 }
 
 int main(int argc, char** argv) {
+    // Elevate process priority to prevent audio thread starvation under heavy CPU load
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
     std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
 
     ma_context context;
@@ -186,6 +189,8 @@ int main(int argc, char** argv) {
     sourceConfig.capture.format = ma_format_f32;
     sourceConfig.dataCallback = capture_callback;
     sourceConfig.pUserData = &appData;
+    // Tell WASAPI we are doing pro-audio to elevate MMCSS thread priority
+    sourceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 
     if (ma_device_init(&context, &sourceConfig, &sourceDevice) != MA_SUCCESS) {
         std::cerr << "Failed to init source loopback device\n";
@@ -201,12 +206,14 @@ int main(int argc, char** argv) {
     ma_device_config targetConfig = ma_device_config_init(ma_device_type_playback);
     targetConfig.playback.pDeviceID = &targetDeviceId;
     targetConfig.playback.format = ma_format_f32;
-    // Set to same sample rate to minimize resampling issues, or default
+    // Keep target sample rate the same as the source to avoid resampling artifacts
     targetConfig.sampleRate = sourceDevice.sampleRate;
     targetConfig.playback.shareMode = shareMode;
     targetConfig.periodSizeInMilliseconds = targetLatency;
     targetConfig.dataCallback = playback_callback;
     targetConfig.pUserData = &appData;
+    // Tell WASAPI we are doing pro-audio to elevate MMCSS thread priority
+    targetConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 
     if (ma_device_init(&context, &targetConfig, &targetDevice) != MA_SUCCESS) {
         std::cerr << "Failed to init target device.\n";
