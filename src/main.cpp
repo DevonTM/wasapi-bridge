@@ -105,9 +105,6 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 }
 
 int main(int argc, char** argv) {
-    // Elevate process priority to prevent audio thread starvation under heavy CPU load
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-
     std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
 
     ma_context context;
@@ -234,6 +231,9 @@ int main(int argc, char** argv) {
     std::cout << "Starting stream...\n";
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
+    // Elevate process priority only when streaming actually starts
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
     ma_device_start(&sourceDevice);
     ma_device_start(&targetDevice);
 
@@ -241,6 +241,9 @@ int main(int argc, char** argv) {
     while (g_keepRunning) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+    // Restore normal priority when stopping
+    SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
 
     std::cout << "\nShutting down gracefully...\n";
     cleanup(&sourceDevice, &targetDevice, &appData);
