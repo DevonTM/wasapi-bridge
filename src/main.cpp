@@ -212,11 +212,9 @@ int main(int argc, char** argv) {
     // Get source device info for channel/sample rate matching
     ma_device_info sourceInfo = pPlaybackInfos[sourceChoice - 1];
 
-    // For simplicity, hardcoded default sample rate, but we can extract more using an intermediary dummy device or context info.
-    appData.sourceChannels = 2; // Default, actual channels handled by device config
+    // Default channel counts, actual channels determined after device init
+    appData.sourceChannels = 2;
     appData.targetChannels = 2;
-
-    ma_pcm_rb_init(ma_format_f32, appData.targetChannels, 44100 * 2, NULL, NULL, &appData.ringBuffer); // 2 second buffer
 
     ma_device_config sourceConfig = ma_device_config_init(ma_device_type_loopback);
     sourceConfig.capture.pDeviceID = &sourceDeviceId;
@@ -262,8 +260,7 @@ int main(int argc, char** argv) {
 
     appData.targetChannels = targetDevice.playback.channels;
 
-    // Restart ring buffer with accurate target channels
-    ma_pcm_rb_uninit(&appData.ringBuffer);
+    // Initialize ring buffer with accurate target channels and sample rate
     ma_pcm_rb_init(ma_format_f32, appData.targetChannels, sourceDevice.sampleRate * 2, NULL, NULL, &appData.ringBuffer);
 
     std::cout << "Starting stream...\n";
