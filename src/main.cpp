@@ -171,7 +171,7 @@ int main(int argc, char** argv) {
     }
     ma_share_mode shareMode = (modeChoice == 2) ? ma_share_mode_exclusive : ma_share_mode_shared;
 
-    uint32_t defaultLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 20;
+    uint32_t defaultLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 10;
     uint32_t targetLatency = defaultLatency;
     
     while (true) {
