@@ -223,6 +223,8 @@ int main(int argc, char** argv) {
     sourceConfig.capture.format = ma_format_f32;
     sourceConfig.dataCallback = capture_callback;
     sourceConfig.pUserData = &appData;
+    // Prefer low-latency defaults
+    sourceConfig.performanceProfile = ma_performance_profile_low_latency;
     // Tell WASAPI we are doing pro-audio to elevate MMCSS thread priority
     sourceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 
@@ -246,6 +248,8 @@ int main(int argc, char** argv) {
     targetConfig.periodSizeInMilliseconds = targetLatency;
     targetConfig.dataCallback = playback_callback;
     targetConfig.pUserData = &appData;
+    // Prefer low-latency defaults
+    targetConfig.performanceProfile = ma_performance_profile_low_latency;
     // Tell WASAPI we are doing pro-audio to elevate MMCSS thread priority
     targetConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 
