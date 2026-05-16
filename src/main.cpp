@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
         while (true) {
             std::cout << "Select TARGET audio device (Output): ";
             if (std::cin >> targetChoice && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= playbackCount) break;
-            std::cout << "Invalid input. Please enter a valid number.\n";
+            std::cout << "Invalid choice. Please enter a valid number.\n";
             std::cin.clear();
             std::cin.ignore(10000, '\n');
         }
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
         if (sourceChoice != targetChoice) {
             break;
         }
-        std::cout << "Error: SOURCE and TARGET cannot be the same device. Please select again.\n";
+        std::cout << "SOURCE and TARGET cannot be the same device. Please select again.\n";
     }
 
     ma_device_id sourceDeviceId = pPlaybackInfos[sourceChoice - 1].id;
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
         try {
             int latencyValue = std::stoi(latencyInput);
             if (latencyValue < 0) {
-                std::cout << "Error: Latency cannot be negative. Please enter a valid positive number.\n";
+                std::cout << "Latency cannot be negative. Please enter a valid positive number.\n";
                 continue;
             }
             if (latencyValue == 0) {
@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
             std::cout << "Latency set to " << targetLatency << " ms\n";
             break;
         } catch(...) {
-            std::cout << "Error: Invalid input. Please enter a valid positive number.\n";
+            std::cout << "Invalid input. Please enter a valid positive number.\n";
         }
     }
 
