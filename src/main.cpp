@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
 
     int sourceChoice = 0;
     int targetChoice = 0;
-    
+
     while (true) {
         while (true) {
             std::cout << "\nSelect SOURCE audio device (Loopback): ";
@@ -173,19 +173,19 @@ int main(int argc, char** argv) {
 
     uint32_t defaultLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 10;
     uint32_t targetLatency = defaultLatency;
-    
+
     while (true) {
         std::cout << "\nEnter desired target latency in milliseconds (default " << defaultLatency << "): ";
         std::string latencyInput;
         std::cin.ignore();
         std::getline(std::cin, latencyInput);
-        
+
         if (latencyInput.empty()) {
             targetLatency = defaultLatency;
             std::cout << "Using default latency " << targetLatency << " ms\n";
             break;
         }
-        
+
         try {
             int latencyValue = std::stoi(latencyInput);
             if (latencyValue < 0) {
