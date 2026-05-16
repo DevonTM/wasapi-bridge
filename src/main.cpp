@@ -171,13 +171,38 @@ int main(int argc, char** argv) {
     }
     ma_share_mode shareMode = (modeChoice == 2) ? ma_share_mode_exclusive : ma_share_mode_shared;
 
-    uint32_t targetLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 20;
-    std::cout << "\nEnter desired target latency in milliseconds (default " << targetLatency << "): ";
-    std::string latencyInput;
-    std::cin.ignore();
-    std::getline(std::cin, latencyInput);
-    if (!latencyInput.empty()) {
-        try { targetLatency = std::stoi(latencyInput); } catch(...) {}
+    uint32_t defaultLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 20;
+    uint32_t targetLatency = defaultLatency;
+    
+    while (true) {
+        std::cout << "\nEnter desired target latency in milliseconds (default " << defaultLatency << "): ";
+        std::string latencyInput;
+        std::cin.ignore();
+        std::getline(std::cin, latencyInput);
+        
+        if (latencyInput.empty()) {
+            targetLatency = defaultLatency;
+            std::cout << "Using default latency " << targetLatency << " ms\n";
+            break;
+        }
+        
+        try {
+            int latencyValue = std::stoi(latencyInput);
+            if (latencyValue < 0) {
+                std::cout << "Error: Latency cannot be negative. Please enter a valid positive number.\n";
+                continue;
+            }
+            if (latencyValue == 0) {
+                targetLatency = defaultLatency;
+                std::cout << "Using default latency " << targetLatency << " ms\n";
+                break;
+            }
+            targetLatency = static_cast<uint32_t>(latencyValue);
+            std::cout << "Latency set to " << targetLatency << " ms\n";
+            break;
+        } catch(...) {
+            std::cout << "Error: Invalid input. Please enter a valid positive number.\n";
+        }
     }
 
     ma_device sourceDevice;
