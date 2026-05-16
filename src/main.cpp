@@ -105,6 +105,7 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 }
 
 int main(int argc, char** argv) {
+    SetConsoleTitleA("WASAPI Bridge");
     std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
 
     ma_context context;
