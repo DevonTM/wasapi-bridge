@@ -131,21 +131,29 @@ int main(int argc, char** argv) {
     }
 
     int sourceChoice = 0;
-    while (true) {
-        std::cout << "\nSelect SOURCE audio device (Loopback): ";
-        if (std::cin >> sourceChoice && sourceChoice >= 1 && static_cast<ma_uint32>(sourceChoice) <= playbackCount) break;
-        std::cout << "Invalid choice. Please enter a valid number.\n";
-        std::cin.clear();
-        std::cin.ignore(10000, '\n');
-    }
-
     int targetChoice = 0;
+    
     while (true) {
-        std::cout << "Select TARGET audio device (Output): ";
-        if (std::cin >> targetChoice && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= playbackCount) break;
-        std::cout << "Invalid input. Please enter a valid number.\n";
-        std::cin.clear();
-        std::cin.ignore(10000, '\n');
+        while (true) {
+            std::cout << "\nSelect SOURCE audio device (Loopback): ";
+            if (std::cin >> sourceChoice && sourceChoice >= 1 && static_cast<ma_uint32>(sourceChoice) <= playbackCount) break;
+            std::cout << "Invalid choice. Please enter a valid number.\n";
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+        }
+
+        while (true) {
+            std::cout << "Select TARGET audio device (Output): ";
+            if (std::cin >> targetChoice && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= playbackCount) break;
+            std::cout << "Invalid input. Please enter a valid number.\n";
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+        }
+
+        if (sourceChoice != targetChoice) {
+            break;
+        }
+        std::cout << "Error: SOURCE and TARGET cannot be the same device. Please select again.\n";
     }
 
     ma_device_id sourceDeviceId = pPlaybackInfos[sourceChoice - 1].id;
