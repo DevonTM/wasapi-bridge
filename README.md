@@ -1,6 +1,6 @@
 # WASAPI Bridge
 
-A low-latency C++ tool to route audio from a WASAPI Loopback device (such as "CABLE Input" from VB-Audio) to a target WASAPI playback device (DAC/Sound Card) using the internal capabilities of the [`miniaudio`](https://github.com/mackron/miniaudio) library.
+A low-latency C++ tool to route audio from a WASAPI loopback device (such as "CABLE Input" from VB-Audio) to a target WASAPI playback device (DAC/Sound Card) using the internal capabilities of the [`miniaudio`](https://github.com/mackron/miniaudio) library.
 
 ## Features
 
@@ -42,7 +42,7 @@ Simply run the executable and follow the command-line prompts. You will be asked
 1. Select your Source Audio Device (Loopback device that you want to capture).
 2. Select your Target Audio Device (Hardware speaker/DAC).
 3. Select Shared or Exclusive mode (Exclusive prevents other applications from using the target device).
-4. Specify target Latency in milliseconds (defaults to 20ms for Shared, 5ms for Exclusive).
+4. Specify target Latency in milliseconds (defaults to 10ms for Shared, 5ms for Exclusive).
 
 To quit the application gracefully and release audio locks, press `Ctrl+C` or close the console window.
 
