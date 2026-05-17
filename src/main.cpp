@@ -10,7 +10,7 @@
 
 #include "miniaudio.h"
 
-#define WB_VERSION "0.1.4"
+#define WB_VERSION "0.2.0"
 
 struct ApplicationData {
     ma_pcm_rb ringBuffer;
