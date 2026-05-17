@@ -8,6 +8,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio)
 
 set(SOURCES
     src/main.cpp
+    src/callbacks.cpp
+    src/device_manager.cpp
+    src/user_interface.cpp
     src/miniaudio_impl.c
 )
 
