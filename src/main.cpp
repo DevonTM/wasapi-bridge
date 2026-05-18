@@ -87,6 +87,7 @@ int main(int argc, char** argv) {
 
     // Cleanup
     std::cout << "\n[INFO] Shutting down gracefully...\n";
+    g_recoveryState.devicesRunning = false;
     bool srcInit = g_recoveryState.sourceInitialized;
     bool tgtInit = g_recoveryState.targetInitialized;
     bool rbInit = g_recoveryState.ringBufferInitialized;
