@@ -144,7 +144,6 @@ bool attempt_recovery(ma_context* context, const BridgeConfig& config,
     g_recoveryState.isRecovering = true;
     g_recoveryState.needsRecovery = false;
     g_recoveryState.devicesRunning = false;
-    g_recoveryState.lastRecoveryAttemptMs = get_current_time_ms();
 
     std::cout << "\n[RECOVERY] Attempting to recover bridge...\n";
     std::cout << "[RECOVERY] Cleaning up devices...\n";
@@ -158,9 +157,8 @@ bool attempt_recovery(ma_context* context, const BridgeConfig& config,
     g_recoveryState.targetInitialized = tgtInit;
     g_recoveryState.ringBufferInitialized = rbInit;
 
-    // Wait 2 seconds before attempting recovery (debounce)
-    std::cout << "[RECOVERY] Waiting 2 seconds before reinitializing...\n";
-    for (int i = 0; i < 20 && g_keepRunning; ++i) {
+    // Wait for system to stabilize
+    for (int i = 0; i < 10 && g_keepRunning; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
@@ -168,6 +166,8 @@ bool attempt_recovery(ma_context* context, const BridgeConfig& config,
         g_recoveryState.isRecovering = false;
         return false;
     }
+
+    g_recoveryState.lastRecoveryAttemptMs = get_current_time_ms();
 
     std::cout << "[RECOVERY] Reinitializing bridge...\n";
 
@@ -181,7 +181,7 @@ bool attempt_recovery(ma_context* context, const BridgeConfig& config,
         g_recoveryState.devicesRunning = true;
         g_recoveryState.needsRecovery = false;
     } else {
-        std::cerr << "[RECOVERY] Failed to recover bridge. Will retry in 2 seconds...\n";
+        std::cerr << "[RECOVERY] Failed to recover bridge. Will retry in 3 seconds...\n";
         // Set flag to try again
         g_recoveryState.needsRecovery = true;
         g_recoveryState.devicesRunning = false;

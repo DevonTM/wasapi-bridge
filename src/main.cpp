@@ -73,8 +73,8 @@ int main(int argc, char** argv) {
             int64_t currentTime = get_current_time_ms();
             int64_t timeSinceLastAttempt = currentTime - g_recoveryState.lastRecoveryAttemptMs;
 
-            // Debounce: only attempt recovery if at least 2 seconds have passed
-            if (timeSinceLastAttempt >= 2000) {
+            // Debounce: only attempt recovery if at least 3 seconds have passed
+            if (timeSinceLastAttempt >= 3000) {
                 attempt_recovery(&context, config, &sourceDevice, &targetDevice, &appData);
             }
         }
