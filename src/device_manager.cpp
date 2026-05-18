@@ -43,8 +43,8 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
                        ma_device* sourceDevice, ma_device* targetDevice,
                        ApplicationData* appData) {
     // Reset application data
-    appData->sourceChannels = 2;
-    appData->targetChannels = 2;
+    appData->sourceChannels.store(2);
+    appData->targetChannels.store(2);
 
     // Initialize source device (loopback)
     ma_device_config sourceConfig = ma_device_config_init(ma_device_type_loopback);
@@ -61,9 +61,9 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
         return false;
     }
 
-    appData->sourceChannels = sourceDevice->capture.channels;
+    appData->sourceChannels.store(sourceDevice->capture.channels);
     std::cout << "[INFO] Source device initialized at " << sourceDevice->sampleRate << " Hz, "
-              << appData->sourceChannels << " channels\n";
+              << appData->sourceChannels.load() << " channels\n";
 
     // Initialize target device (playback)
     ma_device_config targetConfig = ma_device_config_init(ma_device_type_playback);
@@ -84,12 +84,12 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
         return false;
     }
 
-    appData->targetChannels = targetDevice->playback.channels;
+    appData->targetChannels.store(targetDevice->playback.channels);
     std::cout << "[INFO] Target device initialized at " << targetDevice->sampleRate << " Hz, "
-              << appData->targetChannels << " channels\n";
+              << appData->targetChannels.load() << " channels\n";
 
     // Initialize ring buffer
-    ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels,
+    ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels.load(),
                                        sourceDevice->sampleRate * 2, NULL, NULL,
                                        &appData->ringBuffer);
     if (result != MA_SUCCESS) {

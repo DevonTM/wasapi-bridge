@@ -7,8 +7,8 @@
 
 struct ApplicationData {
     ma_pcm_rb ringBuffer;
-    ma_uint32 sourceChannels;
-    ma_uint32 targetChannels;
+    std::atomic<ma_uint32> sourceChannels;
+    std::atomic<ma_uint32> targetChannels;
 };
 
 struct BridgeConfig {

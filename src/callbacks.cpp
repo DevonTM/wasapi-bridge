@@ -62,6 +62,10 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
     ApplicationData* appData = (ApplicationData*)pDevice->pUserData;
     if (pInput == nullptr || appData == nullptr) return;
 
+    // Load atomic channel counts once for consistency
+    ma_uint32 sourceChannels = appData->sourceChannels.load();
+    ma_uint32 targetChannels = appData->targetChannels.load();
+
     ma_uint32 framesToWrite = frameCount;
     ma_uint32 framesAvailable = ma_pcm_rb_available_write(&appData->ringBuffer);
     if (framesToWrite > framesAvailable) {
@@ -77,13 +81,13 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
         float* pDst = (float*)pWriteBuffer;
 
         for (ma_uint32 i = 0; i < framesToWrite; ++i) {
-            for (ma_uint32 c = 0; c < appData->targetChannels; ++c) {
-                if (c < appData->sourceChannels) {
-                    float sample = pSrc[i * appData->sourceChannels + c];
+            for (ma_uint32 c = 0; c < targetChannels; ++c) {
+                if (c < sourceChannels) {
+                    float sample = pSrc[i * sourceChannels + c];
                     // Handle peak clipping correctly (Hard clamp to valid float audio range [-1.0, 1.0])
-                    pDst[i * appData->targetChannels + c] = std::clamp(sample, -1.0f, 1.0f);
+                    pDst[i * targetChannels + c] = std::clamp(sample, -1.0f, 1.0f);
                 } else {
-                    pDst[i * appData->targetChannels + c] = 0.0f;
+                    pDst[i * targetChannels + c] = 0.0f;
                 }
             }
         }
@@ -96,6 +100,9 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
     (void)pInput;
     ApplicationData* appData = (ApplicationData*)pDevice->pUserData;
     if (pOutput == nullptr || appData == nullptr) return;
+
+    // Load atomic channel count once for consistency
+    ma_uint32 targetChannels = appData->targetChannels.load();
 
     ma_uint32 framesToRead = frameCount;
     ma_uint32 framesAvailable = ma_pcm_rb_available_read(&appData->ringBuffer);
@@ -112,7 +119,7 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
         ma_pcm_rb_acquire_read(&appData->ringBuffer, &framesToRead, &pReadBuffer);
 
         float* pSrc = (float*)pReadBuffer;
-        for (ma_uint32 i = 0; i < framesToRead * appData->targetChannels; ++i) {
+        for (ma_uint32 i = 0; i < framesToRead * targetChannels; ++i) {
             pDst[i] = pSrc[i];
         }
 
@@ -121,9 +128,9 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 
     // Fill remainder with zeroes stringently (handle underflow)
     if (framesToRead < frameCount) {
-        ma_uint32 zeroes = (frameCount - framesToRead) * appData->targetChannels;
+        ma_uint32 zeroes = (frameCount - framesToRead) * targetChannels;
         for(ma_uint32 i = 0; i < zeroes; i++) {
-            pDst[framesToRead * appData->targetChannels + i] = 0.0f;
+            pDst[framesToRead * targetChannels + i] = 0.0f;
         }
     }
 }
