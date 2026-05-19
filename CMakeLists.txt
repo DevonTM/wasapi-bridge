@@ -6,15 +6,28 @@ set(CMAKE_CXX_STANDARD 17)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio)
 
-set(SOURCES
+# Project sources get strict warnings; miniaudio_impl.c is a third-party
+# amalgamation kept separate so its own diagnostics don't drown ours.
+set(PROJECT_SOURCES
     src/main.cpp
     src/callbacks.cpp
     src/device_manager.cpp
     src/user_interface.cpp
+)
+set(THIRD_PARTY_SOURCES
     src/miniaudio_impl.c
 )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${THIRD_PARTY_SOURCES})
+
+if(MSVC)
+    set_source_files_properties(${PROJECT_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "/W4")
+else()
+    set_source_files_properties(${PROJECT_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic")
+endif()
+
 
 # Windows 7 support target
 add_definitions(-DWINVER=0x0601 -D_WIN32_WINNT=0x0601)
