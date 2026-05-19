@@ -66,21 +66,24 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
     ma_uint32 sourceChannels = appData->sourceChannels.load();
     ma_uint32 targetChannels = appData->targetChannels.load();
 
-    ma_uint32 framesToWrite = frameCount;
-    ma_uint32 framesAvailable = ma_pcm_rb_available_write(&appData->ringBuffer);
-    if (framesToWrite > framesAvailable) {
-        framesToWrite = framesAvailable;
-    }
+    // Loop because ma_pcm_rb_acquire_write may short-return at the sub-buffer
+    // boundary. Without this loop the leftover frames are silently dropped,
+    // producing intermittent clicks.
+    ma_uint32 remaining = frameCount;
+    ma_uint32 framesWritten = 0;
 
-    if (framesToWrite > 0) {
-        void* pWriteBuffer;
-        ma_pcm_rb_acquire_write(&appData->ringBuffer, &framesToWrite, &pWriteBuffer);
+    while (remaining > 0) {
+        ma_uint32 chunk = remaining;
+        void* pWriteBuffer = nullptr;
 
-        // Copy logic for source -> target mapping
-        float* pSrc = (float*)pInput;
+        if (ma_pcm_rb_acquire_write(&appData->ringBuffer, &chunk, &pWriteBuffer) != MA_SUCCESS) break;
+        if (chunk == 0) break; // Ring buffer full
+
+        const float* pSrc = (const float*)pInput + (size_t)framesWritten * sourceChannels;
         float* pDst = (float*)pWriteBuffer;
 
-        for (ma_uint32 i = 0; i < framesToWrite; ++i) {
+        // Copy logic for source -> target mapping
+        for (ma_uint32 i = 0; i < chunk; ++i) {
             for (ma_uint32 c = 0; c < targetChannels; ++c) {
                 if (c < sourceChannels) {
                     float sample = pSrc[i * sourceChannels + c];
@@ -92,7 +95,10 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
             }
         }
 
-        ma_pcm_rb_commit_write(&appData->ringBuffer, framesToWrite);
+        ma_pcm_rb_commit_write(&appData->ringBuffer, chunk);
+
+        framesWritten += chunk;
+        remaining     -= chunk;
     }
 }
 
@@ -104,33 +110,39 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
     // Load atomic channel count once for consistency
     ma_uint32 targetChannels = appData->targetChannels.load();
 
-    ma_uint32 framesToRead = frameCount;
-    ma_uint32 framesAvailable = ma_pcm_rb_available_read(&appData->ringBuffer);
-
-    if (framesToRead > framesAvailable) {
-        // Not enough data. Just read what's available and zero the rest if we wanted.
-        framesToRead = framesAvailable;
-    }
-
     float* pDst = (float*)pOutput;
 
-    if (framesToRead > 0) {
-        void* pReadBuffer;
-        ma_pcm_rb_acquire_read(&appData->ringBuffer, &framesToRead, &pReadBuffer);
+    // Loop because ma_pcm_rb_acquire_read may short-return at the sub-buffer
+    // boundary. Without this loop the leftover frames are silently dropped,
+    // producing intermittent clicks.
+    ma_uint32 remaining = frameCount;
+    ma_uint32 framesRead = 0;
 
-        float* pSrc = (float*)pReadBuffer;
-        for (ma_uint32 i = 0; i < framesToRead * targetChannels; ++i) {
-            pDst[i] = pSrc[i];
+    while (remaining > 0) {
+        ma_uint32 chunk = remaining;
+        void* pReadBuffer = nullptr;
+
+        if (ma_pcm_rb_acquire_read(&appData->ringBuffer, &chunk, &pReadBuffer) != MA_SUCCESS) break;
+        if (chunk == 0) break; // Ring buffer empty (underflow)
+
+        const float* pSrc = (const float*)pReadBuffer;
+        float* pCursor = pDst + (size_t)framesRead * targetChannels;
+        for (ma_uint32 i = 0; i < chunk * targetChannels; ++i) {
+            pCursor[i] = pSrc[i];
         }
 
-        ma_pcm_rb_commit_read(&appData->ringBuffer, framesToRead);
+        ma_pcm_rb_commit_read(&appData->ringBuffer, chunk);
+
+        framesRead += chunk;
+        remaining  -= chunk;
     }
 
     // Fill remainder with zeroes stringently (handle underflow)
-    if (framesToRead < frameCount) {
-        ma_uint32 zeroes = (frameCount - framesToRead) * targetChannels;
-        for(ma_uint32 i = 0; i < zeroes; i++) {
-            pDst[framesToRead * targetChannels + i] = 0.0f;
+    if (framesRead < frameCount) {
+        ma_uint32 zeroes = (frameCount - framesRead) * targetChannels;
+        float* pTail = pDst + (size_t)framesRead * targetChannels;
+        for (ma_uint32 i = 0; i < zeroes; ++i) {
+            pTail[i] = 0.0f;
         }
     }
 }
