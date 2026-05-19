@@ -118,14 +118,16 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
               << (totalFrames * 1000 / sourceDevice->sampleRate) << " ms)\n";
 
     // Initialize ring buffer
-    ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels.load(),
-                                      totalFrames, NULL, NULL, &appData->ringBuffer);
-    if (result != MA_SUCCESS) {
-        std::cerr << "[ERROR] Failed to initialize ring buffer: "
-                  << ma_result_description(result) << " (" << result << ")\n";
-        ma_device_uninit(targetDevice);
-        ma_device_uninit(sourceDevice);
-        return false;
+    {
+        ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels.load(),
+                                          totalFrames, NULL, NULL, &appData->ringBuffer);
+        if (result != MA_SUCCESS) {
+            std::cerr << "[ERROR] Failed to initialize ring buffer: "
+                      << ma_result_description(result) << " (" << result << ")\n";
+            ma_device_uninit(targetDevice);
+            ma_device_uninit(sourceDevice);
+            return false;
+        }
     }
 
     // Mark devices as initialized
