@@ -25,7 +25,7 @@ if(MSVC)
         COMPILE_OPTIONS "/W4")
 else()
     set_source_files_properties(${PROJECT_SOURCES} PROPERTIES
-        COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic")
+        COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic;-Wshadow")
 endif()
 
 
