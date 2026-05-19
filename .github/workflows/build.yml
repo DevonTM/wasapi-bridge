@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Bump version')
     runs-on: windows-2022
     strategy:
       matrix:
