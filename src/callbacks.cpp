@@ -2,6 +2,7 @@
 #include "types.h"
 #include <iostream>
 #include <algorithm>
+#include <cstring>
 
 void device_notification_callback(const ma_device_notification* pNotification) {
     if (!pNotification || !pNotification->pDevice) {
@@ -92,15 +93,27 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
         const float* pSrc = (const float*)pInput + (size_t)framesWritten * sourceChannels;
         float* pDst = (float*)pWriteBuffer;
 
-        // Copy logic for source -> target mapping
-        for (ma_uint32 i = 0; i < chunk; ++i) {
-            for (ma_uint32 c = 0; c < targetChannels; ++c) {
-                if (c < sourceChannels) {
-                    float sample = pSrc[i * sourceChannels + c];
-                    // Handle peak clipping correctly (Hard clamp to valid float audio range [-1.0, 1.0])
-                    pDst[i * targetChannels + c] = std::clamp(sample, -1.0f, 1.0f);
-                } else {
-                    pDst[i * targetChannels + c] = 0.0f;
+        // Source -> target channel mapping. Per AGENTS.md: positional map,
+        // drop unmapped source channels, zero unmapped target channels.
+        // Hard clamp to [-1.0, 1.0] for peak clipping.
+        if (sourceChannels == targetChannels) {
+            // Fast path: layouts match, contiguous copy + clamp.
+            const ma_uint32 totalSamples = chunk * targetChannels;
+            for (ma_uint32 i = 0; i < totalSamples; ++i) {
+                pDst[i] = std::clamp(pSrc[i], -1.0f, 1.0f);
+            }
+        } else {
+            // Differing channel counts: branch hoisted out of the inner loop.
+            const ma_uint32 mappedChannels = std::min(sourceChannels, targetChannels);
+            const ma_uint32 zeroChannels   = targetChannels - mappedChannels;
+            for (ma_uint32 i = 0; i < chunk; ++i) {
+                const float* pFrameSrc = pSrc + (size_t)i * sourceChannels;
+                float*       pFrameDst = pDst + (size_t)i * targetChannels;
+                for (ma_uint32 c = 0; c < mappedChannels; ++c) {
+                    pFrameDst[c] = std::clamp(pFrameSrc[c], -1.0f, 1.0f);
+                }
+                for (ma_uint32 c = 0; c < zeroChannels; ++c) {
+                    pFrameDst[mappedChannels + c] = 0.0f;
                 }
             }
         }
@@ -137,9 +150,7 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 
         const float* pSrc = (const float*)pReadBuffer;
         float* pCursor = pDst + (size_t)framesRead * targetChannels;
-        for (ma_uint32 i = 0; i < chunk * targetChannels; ++i) {
-            pCursor[i] = pSrc[i];
-        }
+        std::memcpy(pCursor, pSrc, (size_t)chunk * targetChannels * sizeof(float));
 
         ma_pcm_rb_commit_read(&appData->ringBuffer, chunk);
 
@@ -147,12 +158,11 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
         remaining  -= chunk;
     }
 
-    // Fill remainder with zeroes stringently (handle underflow)
+    // Fill remainder with zeroes stringently (handle underflow). memset of
+    // all-zero bytes is +0.0f for IEEE-754 floats.
     if (framesRead < frameCount) {
-        ma_uint32 zeroes = (frameCount - framesRead) * targetChannels;
+        const ma_uint32 zeroes = (frameCount - framesRead) * targetChannels;
         float* pTail = pDst + (size_t)framesRead * targetChannels;
-        for (ma_uint32 i = 0; i < zeroes; ++i) {
-            pTail[i] = 0.0f;
-        }
+        std::memset(pTail, 0, (size_t)zeroes * sizeof(float));
     }
 }
