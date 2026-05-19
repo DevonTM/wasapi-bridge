@@ -24,7 +24,7 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType) {
     return FALSE;
 }
 
-int main(int argc, char** argv) {
+int main() {
     SetConsoleTitleA("WASAPI Bridge");
     std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
 
