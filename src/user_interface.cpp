@@ -1,5 +1,6 @@
 #include "user_interface.h"
 #include <iostream>
+#include <limits>
 #include <string>
 
 bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
@@ -16,6 +17,13 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
         std::cout << i + 1 << ". " << pPlaybackInfos[i].name << "\n";
     }
 
+    // Helper: drain everything up to and including the next newline. Always
+    // call this after a formatted `std::cin >> int` read so the stream is in
+    // a clean state for any later read (whether `>>` or std::getline).
+    const auto flushLine = [] {
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    };
+
     int sourceChoice = 0;
     int targetChoice = 0;
 
@@ -23,18 +31,20 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
     while (true) {
         while (true) {
             std::cout << "\nSelect SOURCE audio device (Loopback): ";
-            if (std::cin >> sourceChoice && sourceChoice >= 1 && static_cast<ma_uint32>(sourceChoice) <= playbackCount) break;
+            const bool ok = static_cast<bool>(std::cin >> sourceChoice);
+            if (!ok) std::cin.clear();
+            flushLine();
+            if (ok && sourceChoice >= 1 && static_cast<ma_uint32>(sourceChoice) <= playbackCount) break;
             std::cout << "Invalid choice. Please enter a valid number.\n";
-            std::cin.clear();
-            std::cin.ignore(10000, '\n');
         }
 
         while (true) {
             std::cout << "Select TARGET audio device (Output): ";
-            if (std::cin >> targetChoice && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= playbackCount) break;
+            const bool ok = static_cast<bool>(std::cin >> targetChoice);
+            if (!ok) std::cin.clear();
+            flushLine();
+            if (ok && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= playbackCount) break;
             std::cout << "Invalid choice. Please enter a valid number.\n";
-            std::cin.clear();
-            std::cin.ignore(10000, '\n');
         }
 
         if (sourceChoice != targetChoice) {
@@ -48,21 +58,22 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
     int modeChoice = 0;
     while (true) {
         std::cout << "Select Mode for TARGET device: ";
-        if (std::cin >> modeChoice && (modeChoice == 1 || modeChoice == 2)) break;
+        const bool ok = static_cast<bool>(std::cin >> modeChoice);
+        if (!ok) std::cin.clear();
+        flushLine();
+        if (ok && (modeChoice == 1 || modeChoice == 2)) break;
         std::cout << "Invalid choice. Please enter 1 or 2.\n";
-        std::cin.clear();
-        std::cin.ignore(10000, '\n');
     }
     ma_share_mode shareMode = (modeChoice == 2) ? ma_share_mode_exclusive : ma_share_mode_shared;
 
-    // Latency configuration
+    // Latency configuration. Stream is already flushed after the mode read
+    // above, so getline starts cleanly.
     uint32_t defaultLatency = (shareMode == ma_share_mode_exclusive) ? 5 : 10;
     uint32_t targetLatency = defaultLatency;
 
     while (true) {
         std::cout << "\nEnter desired target latency in milliseconds (default " << defaultLatency << "): ";
         std::string latencyInput;
-        std::cin.ignore();
         std::getline(std::cin, latencyInput);
 
         if (latencyInput.empty()) {
