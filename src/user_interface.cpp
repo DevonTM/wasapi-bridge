@@ -2,19 +2,65 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <vector>
+
+namespace {
+struct DeviceEntry {
+    ma_uint32 originalIndex; // index into pPlaybackInfos[]
+    bool      supportsShared;
+    bool      supportsExclusive;
+};
+}
 
 bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
     ma_device_info* pPlaybackInfos;
-    ma_uint32 playbackCount;
+    ma_uint32       playbackCount;
 
     if (ma_context_get_devices(context, &pPlaybackInfos, &playbackCount, NULL, NULL) != MA_SUCCESS) {
         std::cerr << "Failed to enumerate devices.\n";
         return false;
     }
 
-    std::cout << "\nAvailable Playback Devices:\n";
+    // Filter unsupported devices and remember the share modes each remaining
+    // one advertises (per AGENTS.md: "Also filter out unsupported audio
+    // devices."). Skip devices that report no native formats — those are
+    // typically virtual or unavailable shells that miniaudio could not probe;
+    // ma_device_init would fail later if we tried to use them. The
+    // share-mode flags are kept internally and used to validate the user's
+    // target+mode combination after the prompt completes.
+    std::vector<DeviceEntry> usableDevices;
+    usableDevices.reserve(playbackCount);
+
     for (ma_uint32 i = 0; i < playbackCount; ++i) {
-        std::cout << i + 1 << ". " << pPlaybackInfos[i].name << "\n";
+        ma_device_info info = {};
+        if (ma_context_get_device_info(context, ma_device_type_playback,
+                                       &pPlaybackInfos[i].id, &info) != MA_SUCCESS) {
+            continue;
+        }
+        if (info.nativeDataFormatCount == 0) {
+            continue;
+        }
+
+        DeviceEntry entry{i, false, false};
+        for (ma_uint32 f = 0; f < info.nativeDataFormatCount; ++f) {
+            if (info.nativeDataFormats[f].flags & MA_DATA_FORMAT_FLAG_EXCLUSIVE_MODE) {
+                entry.supportsExclusive = true;
+            } else {
+                entry.supportsShared = true;
+            }
+        }
+        usableDevices.push_back(entry);
+    }
+
+    if (usableDevices.empty()) {
+        std::cerr << "No usable playback devices found.\n";
+        return false;
+    }
+
+    std::cout << "\nAvailable Playback Devices:\n";
+    for (size_t i = 0; i < usableDevices.size(); ++i) {
+        std::cout << i + 1 << ". "
+                  << pPlaybackInfos[usableDevices[i].originalIndex].name << "\n";
     }
 
     // Helper: drain everything up to and including the next newline. Always
@@ -23,6 +69,8 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
     const auto flushLine = [] {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     };
+
+    const ma_uint32 deviceCount = static_cast<ma_uint32>(usableDevices.size());
 
     int sourceChoice = 0;
     int targetChoice = 0;
@@ -34,7 +82,7 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
             const bool ok = static_cast<bool>(std::cin >> sourceChoice);
             if (!ok) std::cin.clear();
             flushLine();
-            if (ok && sourceChoice >= 1 && static_cast<ma_uint32>(sourceChoice) <= playbackCount) break;
+            if (ok && sourceChoice >= 1 && static_cast<ma_uint32>(sourceChoice) <= deviceCount) break;
             std::cout << "Invalid choice. Please enter a valid number.\n";
         }
 
@@ -43,7 +91,7 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
             const bool ok = static_cast<bool>(std::cin >> targetChoice);
             if (!ok) std::cin.clear();
             flushLine();
-            if (ok && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= playbackCount) break;
+            if (ok && targetChoice >= 1 && static_cast<ma_uint32>(targetChoice) <= deviceCount) break;
             std::cout << "Invalid choice. Please enter a valid number.\n";
         }
 
@@ -64,7 +112,23 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
         if (ok && (modeChoice == 1 || modeChoice == 2)) break;
         std::cout << "Invalid choice. Please enter 1 or 2.\n";
     }
-    ma_share_mode shareMode = (modeChoice == 2) ? ma_share_mode_exclusive : ma_share_mode_shared;
+    const ma_share_mode shareMode = (modeChoice == 2) ? ma_share_mode_exclusive : ma_share_mode_shared;
+
+    // Validate target against the chosen share mode. The filtered device
+    // list ensures every entry has at least one mode, but a user can still
+    // pick exclusive against a target that only advertises shared (or vice
+    // versa). Catch that here so we fail with a directed message instead of
+    // letting ma_device_init fail downstream.
+    const auto& targetEntry = usableDevices[targetChoice - 1];
+    if (shareMode == ma_share_mode_exclusive && !targetEntry.supportsExclusive) {
+        std::cerr << "TARGET device does not advertise exclusive mode in its current Windows configuration.\n";
+        std::cerr << "Either pick a different target or choose Shared mode.\n";
+        return false;
+    }
+    if (shareMode == ma_share_mode_shared && !targetEntry.supportsShared) {
+        std::cerr << "TARGET device does not advertise shared mode.\n";
+        return false;
+    }
 
     // Latency configuration. Stream is already flushed after the mode read
     // above, so getline starts cleanly.
@@ -101,9 +165,11 @@ bool prompt_user_configuration(ma_context* context, BridgeConfig* config) {
         }
     }
 
-    // Store configuration
-    config->sourceDeviceId = pPlaybackInfos[sourceChoice - 1].id;
-    config->targetDeviceId = pPlaybackInfos[targetChoice - 1].id;
+    // Store configuration. Map filtered-list indices back to the original
+    // pPlaybackInfos[] entries so we hand miniaudio the real device IDs.
+    const auto& sourceEntry = usableDevices[sourceChoice - 1];
+    config->sourceDeviceId = pPlaybackInfos[sourceEntry.originalIndex].id;
+    config->targetDeviceId = pPlaybackInfos[targetEntry.originalIndex].id;
     config->shareMode = shareMode;
     config->targetLatency = targetLatency;
 
