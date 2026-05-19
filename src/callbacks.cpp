@@ -20,28 +20,38 @@ void device_notification_callback(const ma_device_notification* pNotification) {
 
     const char* deviceType = (pNotification->pDevice->type == ma_device_type_loopback) ? "SOURCE" : "TARGET";
 
+    // Wakes the main loop immediately when recovery is needed. notify_one is
+    // safe to call without holding g_wakeupMutex; the atomic flag carries the
+    // signal value, the CV is just the wakeup mechanism. This honours the
+    // "no heavyweight locks in the notification callback" rule since miniaudio
+    // can call this from a WASAPI thread.
+    auto wakeMainLoop = [] {
+        g_recoveryState.needsRecovery = true;
+        g_wakeupCv.notify_one();
+    };
+
     switch (pNotification->type) {
         case ma_device_notification_type_stopped:
             std::cout << "\n[NOTIFICATION] " << deviceType << " device stopped unexpectedly\n";
-            g_recoveryState.needsRecovery = true;
             g_recoveryState.devicesRunning = false;
+            wakeMainLoop();
             break;
 
         case ma_device_notification_type_rerouted:
             std::cout << "\n[NOTIFICATION] " << deviceType << " device rerouted\n";
-            g_recoveryState.needsRecovery = true;
             g_recoveryState.devicesRunning = false;
+            wakeMainLoop();
             break;
 
         case ma_device_notification_type_interruption_began:
             std::cout << "\n[NOTIFICATION] " << deviceType << " device interruption began\n";
-            g_recoveryState.needsRecovery = true;
             g_recoveryState.devicesRunning = false;
+            wakeMainLoop();
             break;
 
         case ma_device_notification_type_interruption_ended:
             std::cout << "\n[NOTIFICATION] " << deviceType << " device interruption ended\n";
-            g_recoveryState.needsRecovery = true;
+            wakeMainLoop();
             break;
 
         case ma_device_notification_type_started:

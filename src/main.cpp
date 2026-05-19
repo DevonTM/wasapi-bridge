@@ -12,10 +12,13 @@
 // Global state definitions
 std::atomic<bool> g_keepRunning{true};
 RecoveryState g_recoveryState;
+std::mutex g_wakeupMutex;
+std::condition_variable g_wakeupCv;
 
 BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType) {
     if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_CLOSE_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
         g_keepRunning = false;
+        g_wakeupCv.notify_one();
         return TRUE;
     }
     return FALSE;
@@ -66,7 +69,10 @@ int main(int argc, char** argv) {
     std::cout << "\n[INFO] Bridge is running. Press Ctrl+C to quit.\n";
     std::cout << "[INFO] Automatic recovery enabled - bridge will attempt to recover from device failures.\n";
 
-    // Main loop with recovery handling
+    // Main loop with recovery handling. Waits on a condition variable so we
+    // wake up immediately on Ctrl+C or a device-state notification instead of
+    // riding out the poll timeout. The 100 ms timeout stays as a safety belt
+    // and as the polling cadence for the 3-second recovery debounce.
     while (g_keepRunning) {
         // Check if recovery is needed
         if (g_recoveryState.needsRecovery && !g_recoveryState.isRecovering) {
@@ -79,7 +85,11 @@ int main(int argc, char** argv) {
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::unique_lock<std::mutex> lock(g_wakeupMutex);
+        g_wakeupCv.wait_for(lock, std::chrono::milliseconds(100), [] {
+            return !g_keepRunning ||
+                   (g_recoveryState.needsRecovery && !g_recoveryState.isRecovering);
+        });
     }
 
     // Restore normal priority when stopping

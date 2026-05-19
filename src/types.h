@@ -2,6 +2,7 @@
 #define WB_TYPES_H
 
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include "miniaudio.h"
 
@@ -32,5 +33,12 @@ struct RecoveryState {
 // Global state
 extern std::atomic<bool> g_keepRunning;
 extern RecoveryState g_recoveryState;
+
+// Wakeup primitive used by the main loop. Notified from
+// device_notification_callback when recovery is needed and from
+// ConsoleCtrlHandler on shutdown so the main loop reacts immediately
+// instead of waiting for its periodic poll timeout to expire.
+extern std::mutex g_wakeupMutex;
+extern std::condition_variable g_wakeupCv;
 
 #endif // WB_TYPES_H
