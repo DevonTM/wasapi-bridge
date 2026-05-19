@@ -89,29 +89,27 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
               << appData->targetChannels.load() << " channels\n";
 
     // Size the ring buffer based on actual period sizes chosen by miniaudio.
-    // Using max(sourcePeriod, targetPeriod) as the sub-buffer size with 4
-    // sub-buffers gives enough headroom for jitter between the capture and
-    // playback callbacks while keeping total latency bounded (vs. the old
-    // 2-second blanket allocation).
+    // Use a single sub-buffer: ma_rb_acquire_read returns "available" bounded
+    // by the current sub-buffer when the loop flags differ, which causes
+    // partial reads on every sub-buffer boundary in a multi-sub-buffer ring.
+    // Single sub-buffer means there's only one wraparound per ring, and the
+    // wraparound loop in callbacks.cpp handles it cleanly.
     ma_uint32 srcPeriod = sourceDevice->capture.internalPeriodSizeInFrames;
     ma_uint32 tgtPeriod = targetDevice->playback.internalPeriodSizeInFrames;
-    ma_uint32 subbufferFrames = (srcPeriod > tgtPeriod) ? srcPeriod : tgtPeriod;
-    if (subbufferFrames == 0) {
+    ma_uint32 maxPeriod = (srcPeriod > tgtPeriod) ? srcPeriod : tgtPeriod;
+    if (maxPeriod == 0) {
         // Defensive fallback - WASAPI always populates these, but just in case.
-        subbufferFrames = sourceDevice->sampleRate / 100; // ~10 ms
+        maxPeriod = sourceDevice->sampleRate / 100; // ~10 ms
     }
-    const ma_uint32 subbufferCount = 4;
 
-    std::cout << "[INFO] Ring buffer: " << subbufferCount << " x "
-              << subbufferFrames << " frames ("
-              << (subbufferCount * subbufferFrames) << " frames total, ~"
-              << (subbufferCount * subbufferFrames * 1000 / sourceDevice->sampleRate)
-              << " ms)\n";
+    ma_uint32 totalFrames = maxPeriod * 4;
+
+    std::cout << "[INFO] Ring buffer: " << totalFrames << " frames (~"
+              << (totalFrames * 1000 / sourceDevice->sampleRate) << " ms)\n";
 
     // Initialize ring buffer
-    ma_result result = ma_pcm_rb_init_ex(ma_format_f32, appData->targetChannels.load(),
-                                         subbufferFrames, subbufferCount, 0,
-                                         NULL, NULL, &appData->ringBuffer);
+    ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels.load(),
+                                      totalFrames, NULL, NULL, &appData->ringBuffer);
     if (result != MA_SUCCESS) {
         std::cerr << "[ERROR] Failed to initialize ring buffer\n";
         ma_device_uninit(targetDevice);
