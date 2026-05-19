@@ -41,18 +41,16 @@ jobs:
       run: cmake --build build --config Release
 
     - name: Set Release Version
+      id: version
       shell: pwsh
       run: |
-        $VERSION = "latest"
-        if ("${{ github.event_name }}" -eq "release") {
-          $VERSION = "${{ github.event.release.tag_name }}"
-        }
-        echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+        $VERSION = if ("${{ github.event_name }}" -eq "release") { "${{ github.event.release.tag_name }}" } else { "latest" }
+        "version=$VERSION" >> $env:GITHUB_OUTPUT
 
     - name: Prepare and Zip Artifacts
       shell: pwsh
       run: |
-        $DIR = "wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}"
+        $DIR = "wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}"
         mkdir $DIR
         Copy-Item build\Release\wasapi-bridge.exe -Destination $DIR\
         Copy-Item LICENSE -Destination $DIR\
@@ -61,11 +59,11 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}
-        path: wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}
+        name: wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}
+        path: wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}
 
     - name: Upload to Release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with:
-        files: wasapi-bridge-${{ env.VERSION }}-${{ matrix.name }}.zip
+        files: wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}.zip
