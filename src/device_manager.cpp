@@ -88,10 +88,30 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     std::cout << "[INFO] Target device initialized at " << targetDevice->sampleRate << " Hz, "
               << appData->targetChannels.load() << " channels\n";
 
+    // Size the ring buffer based on actual period sizes chosen by miniaudio.
+    // Using max(sourcePeriod, targetPeriod) as the sub-buffer size with 4
+    // sub-buffers gives enough headroom for jitter between the capture and
+    // playback callbacks while keeping total latency bounded (vs. the old
+    // 2-second blanket allocation).
+    ma_uint32 srcPeriod = sourceDevice->capture.internalPeriodSizeInFrames;
+    ma_uint32 tgtPeriod = targetDevice->playback.internalPeriodSizeInFrames;
+    ma_uint32 subbufferFrames = (srcPeriod > tgtPeriod) ? srcPeriod : tgtPeriod;
+    if (subbufferFrames == 0) {
+        // Defensive fallback - WASAPI always populates these, but just in case.
+        subbufferFrames = sourceDevice->sampleRate / 100; // ~10 ms
+    }
+    const ma_uint32 subbufferCount = 4;
+
+    std::cout << "[INFO] Ring buffer: " << subbufferCount << " x "
+              << subbufferFrames << " frames ("
+              << (subbufferCount * subbufferFrames) << " frames total, ~"
+              << (subbufferCount * subbufferFrames * 1000 / sourceDevice->sampleRate)
+              << " ms)\n";
+
     // Initialize ring buffer
-    ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels.load(),
-                                       sourceDevice->sampleRate * 2, NULL, NULL,
-                                       &appData->ringBuffer);
+    ma_result result = ma_pcm_rb_init_ex(ma_format_f32, appData->targetChannels.load(),
+                                         subbufferFrames, subbufferCount, 0,
+                                         NULL, NULL, &appData->ringBuffer);
     if (result != MA_SUCCESS) {
         std::cerr << "[ERROR] Failed to initialize ring buffer\n";
         ma_device_uninit(targetDevice);
