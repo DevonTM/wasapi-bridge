@@ -34,9 +34,13 @@ int main() {
     contextConfig.threadPriority = ma_thread_priority_realtime;
 
     ma_backend backend = ma_backend_wasapi;
-    if (ma_context_init(&backend, 1, &contextConfig, &context) != MA_SUCCESS) {
-        std::cerr << "Failed to initialize standard WASAPI context.\n";
-        return -1;
+    {
+        ma_result result = ma_context_init(&backend, 1, &contextConfig, &context);
+        if (result != MA_SUCCESS) {
+            std::cerr << "Failed to initialize standard WASAPI context: "
+                      << ma_result_description(result) << " (" << result << ")\n";
+            return -1;
+        }
     }
 
     // Prompt user for configuration

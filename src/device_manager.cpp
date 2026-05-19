@@ -56,9 +56,13 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     sourceConfig.performanceProfile = ma_performance_profile_low_latency;
     sourceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 
-    if (ma_device_init(context, &sourceConfig, sourceDevice) != MA_SUCCESS) {
-        std::cerr << "[ERROR] Failed to initialize source loopback device\n";
-        return false;
+    {
+        ma_result result = ma_device_init(context, &sourceConfig, sourceDevice);
+        if (result != MA_SUCCESS) {
+            std::cerr << "[ERROR] Failed to initialize source loopback device: "
+                      << ma_result_description(result) << " (" << result << ")\n";
+            return false;
+        }
     }
 
     appData->sourceChannels.store(sourceDevice->capture.channels);
@@ -79,10 +83,14 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     targetConfig.performanceProfile = ma_performance_profile_low_latency;
     targetConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 
-    if (ma_device_init(context, &targetConfig, targetDevice) != MA_SUCCESS) {
-        std::cerr << "[ERROR] Failed to initialize target device\n";
-        ma_device_uninit(sourceDevice);
-        return false;
+    {
+        ma_result result = ma_device_init(context, &targetConfig, targetDevice);
+        if (result != MA_SUCCESS) {
+            std::cerr << "[ERROR] Failed to initialize target device: "
+                      << ma_result_description(result) << " (" << result << ")\n";
+            ma_device_uninit(sourceDevice);
+            return false;
+        }
     }
 
     appData->targetChannels.store(targetDevice->playback.channels);
@@ -113,7 +121,8 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     ma_result result = ma_pcm_rb_init(ma_format_f32, appData->targetChannels.load(),
                                       totalFrames, NULL, NULL, &appData->ringBuffer);
     if (result != MA_SUCCESS) {
-        std::cerr << "[ERROR] Failed to initialize ring buffer\n";
+        std::cerr << "[ERROR] Failed to initialize ring buffer: "
+                  << ma_result_description(result) << " (" << result << ")\n";
         ma_device_uninit(targetDevice);
         ma_device_uninit(sourceDevice);
         return false;
@@ -125,28 +134,36 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     g_recoveryState.ringBufferInitialized = true;
 
     // Start devices
-    if (ma_device_start(sourceDevice) != MA_SUCCESS) {
-        std::cerr << "[ERROR] Failed to start source device\n";
-        bool srcInit = g_recoveryState.sourceInitialized;
-        bool tgtInit = g_recoveryState.targetInitialized;
-        bool rbInit = g_recoveryState.ringBufferInitialized;
-        cleanup_devices(sourceDevice, targetDevice, appData, &srcInit, &tgtInit, &rbInit);
-        g_recoveryState.sourceInitialized = srcInit;
-        g_recoveryState.targetInitialized = tgtInit;
-        g_recoveryState.ringBufferInitialized = rbInit;
-        return false;
+    {
+        ma_result result = ma_device_start(sourceDevice);
+        if (result != MA_SUCCESS) {
+            std::cerr << "[ERROR] Failed to start source device: "
+                      << ma_result_description(result) << " (" << result << ")\n";
+            bool srcInit = g_recoveryState.sourceInitialized;
+            bool tgtInit = g_recoveryState.targetInitialized;
+            bool rbInit = g_recoveryState.ringBufferInitialized;
+            cleanup_devices(sourceDevice, targetDevice, appData, &srcInit, &tgtInit, &rbInit);
+            g_recoveryState.sourceInitialized = srcInit;
+            g_recoveryState.targetInitialized = tgtInit;
+            g_recoveryState.ringBufferInitialized = rbInit;
+            return false;
+        }
     }
 
-    if (ma_device_start(targetDevice) != MA_SUCCESS) {
-        std::cerr << "[ERROR] Failed to start target device\n";
-        bool srcInit = g_recoveryState.sourceInitialized;
-        bool tgtInit = g_recoveryState.targetInitialized;
-        bool rbInit = g_recoveryState.ringBufferInitialized;
-        cleanup_devices(sourceDevice, targetDevice, appData, &srcInit, &tgtInit, &rbInit);
-        g_recoveryState.sourceInitialized = srcInit;
-        g_recoveryState.targetInitialized = tgtInit;
-        g_recoveryState.ringBufferInitialized = rbInit;
-        return false;
+    {
+        ma_result result = ma_device_start(targetDevice);
+        if (result != MA_SUCCESS) {
+            std::cerr << "[ERROR] Failed to start target device: "
+                      << ma_result_description(result) << " (" << result << ")\n";
+            bool srcInit = g_recoveryState.sourceInitialized;
+            bool tgtInit = g_recoveryState.targetInitialized;
+            bool rbInit = g_recoveryState.ringBufferInitialized;
+            cleanup_devices(sourceDevice, targetDevice, appData, &srcInit, &tgtInit, &rbInit);
+            g_recoveryState.sourceInitialized = srcInit;
+            g_recoveryState.targetInitialized = tgtInit;
+            g_recoveryState.ringBufferInitialized = rbInit;
+            return false;
+        }
     }
 
     return true;
