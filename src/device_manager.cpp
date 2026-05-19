@@ -62,7 +62,8 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     }
 
     appData->sourceChannels.store(sourceDevice->capture.channels);
-    std::cout << "[INFO] Source device initialized at " << sourceDevice->sampleRate << " Hz, "
+    std::cout << "[INFO] Source device initialized at "
+              << sourceDevice->capture.internalSampleRate << " Hz, "
               << appData->sourceChannels.load() << " channels\n";
 
     // Initialize target device (playback)
@@ -85,7 +86,8 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     }
 
     appData->targetChannels.store(targetDevice->playback.channels);
-    std::cout << "[INFO] Target device initialized at " << targetDevice->sampleRate << " Hz, "
+    std::cout << "[INFO] Target device initialized at "
+              << targetDevice->playback.internalSampleRate << " Hz, "
               << appData->targetChannels.load() << " channels\n";
 
     // Size the ring buffer based on actual period sizes chosen by miniaudio.
