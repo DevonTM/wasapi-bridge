@@ -70,6 +70,7 @@ elseif(MSVC)
         $<$<CONFIG:Debug>:/MTd>
     )
     target_link_options(${PROJECT_NAME} PRIVATE
+        /MANIFEST:NO
         $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:/OPT:REF>
         $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:/OPT:ICF>
     )
