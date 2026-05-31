@@ -1,4 +1,4 @@
-## Requirement
+## Requirements
 - Route source audio device playback to another target audio device playback.
 - Mainly used for "CABLE Input" from VB-Audio as the source audio device playback and internal/external DAC/Sound Card as the target audio device playback.
 - Support APO because users may use this with HeSuVi.
@@ -8,15 +8,27 @@
 - Automatically set output format and sample rate in the target audio device same as the source audio device on WASAPI Exclusive mode, if not supported then use resampler.
 - Use resampler if the target audio device sample rate is not same as the source audio device on WASAPI Shared mode.
 - The source audio device may be detected as 32 bit format even if we set it to 24 bit in Windows sound setting. The target audio device may only support up to 24 bit, so we must handle this case too.
-- Prompt user to select the source and target devices. Also filter out unsupported audio devices.
-- Prompt user to select the WASAPI mode.
-- Prompt user to adjust the latency, the app must set good default latency for WASAPI Shared mode or WASAPI Exclusive mode.
-- The prompt is simple, no need for color or arrow selection.
+- A clean, simple, modern-looking GUI for the app.
 
 ## Setup
 - Use WASAPI Loopback for the source audio device playback and use WASAPI Shared mode or WASAPI Exclusive mode for the target audio device playback.
 - Use ring buffer.
 - Use miniaudio library.
 - Use C or C++.
-- Use CMake and Ninja build system. Use -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 since my CMake is detected as msys2/cygwin instead of MinGW.
+- Use CMake and Ninja build system. Use `-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64` since my CMake is detected as msys2/cygwin instead of MinGW.
 - Good project structure.
+
+## File-editing rules
+- Never rewrite a file > 200 lines whole. Use replace_in_file with one small SEARCH/REPLACE block at a time, even if you need many calls.
+- Each replace_in_file call: maximum 3 SEARCH/REPLACE blocks, max ~80 lines of replacement content total. If you need more, split across multiple calls.
+- Before any file write, state the file size. If unknown, read_file first. If > 200 lines, plan replace_in_file. Always.
+- If a tool call fails with "without value for required parameter," do NOT retry the same call. Cut the payload in half and try again.
+
+## Reasoning rules
+- Keep "thinking" between tool calls under ~200 words. Long planning belongs in plan_mode_respond, not before tool calls.
+- Don't restate the full code being edited inside reasoning. The diff block already contains it.
+
+## Task structure
+- Break large refactors into a step-list of independent files. Touch one file per turn, build after every 2-3 file changes.
+- Verify with execute_command `cmake --build` at every checkpoint.
+- Stop and ask for direction if 2 successive build attempts fail.
