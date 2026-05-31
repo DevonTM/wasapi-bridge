@@ -152,6 +152,17 @@ int RunGui(HINSTANCE hInstance, int nCmdShow) {
             }
         }
 
+        // Reveal keyboard focus cues (the dashed ring) on Tab/Shift+Tab. Our
+        // custom Tab handling below consumes some Tab keys with `continue`,
+        // bypassing IsDialogMessageW -- and that call normally clears
+        // UISF_HIDEFOCUS for a freshly opened mouse-activated window. Arrow
+        // keys fall through to IsDialogMessageW and reveal the ring on their
+        // own, so they don't need explicit handling here.
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_TAB) {
+            SendMessageW(hwnd, WM_CHANGEUISTATE,
+                         MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
+        }
+
         if (msg.message == WM_KEYDOWN && msg.wParam == VK_TAB && panel) {
             bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             // Startup state: nothing focused yet. Backward navigation
