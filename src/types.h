@@ -34,10 +34,9 @@ struct RecoveryState {
 extern std::atomic<bool> g_keepRunning;
 extern RecoveryState g_recoveryState;
 
-// Wakeup primitive used by the main loop. Notified from
-// device_notification_callback when recovery is needed and from
-// ConsoleCtrlHandler on shutdown so the main loop reacts immediately
-// instead of waiting for its periodic poll timeout to expire.
+// Wakeup primitive used by the bridge worker. Notified from device events and
+// stop requests so the worker reacts immediately instead of waiting for its
+// periodic poll timeout to expire.
 extern std::mutex g_wakeupMutex;
 extern std::condition_variable g_wakeupCv;
 

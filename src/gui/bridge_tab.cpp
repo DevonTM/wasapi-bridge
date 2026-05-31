@@ -150,9 +150,9 @@ HWND MakeRadio(HWND parent, int x, int y, int cx, int cy, int id, const wchar_t*
     //     group as a whole, focus parks on whichever radio is checked.
     //   * Subsequent radios get neither flag — arrow keys move within the
     //     group, Tab skips past it.
-    // Earlier we put WS_TABSTOP on every radio, which made Tab visit each
-    // radio individually and (via BS_AUTORADIOBUTTON) auto-select it on
-    // focus, scrambling the latency hint.
+    // Giving every radio WS_TABSTOP makes Tab visit each one individually and
+    // (via BS_AUTORADIOBUTTON) auto-select it on focus, scrambling the
+    // latency hint.
     DWORD style = WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON;
     if (first) style |= WS_GROUP | WS_TABSTOP;
     return CreateWindowExW(0, L"BUTTON", text, style,
@@ -212,8 +212,8 @@ HWND CreateBridgeTab(AppState* st, HWND hParent) {
 
     // No WS_CLIPCHILDREN: with group boxes (which only paint their border +
     // title), the panel must be allowed to fill the group box interiors with
-    // the dialog background or pixels from the previously-shown tab leak
-    // through. WS_CLIPSIBLINGS is still needed for sibling controls.
+    // the dialog background; otherwise stale pixels from hidden sibling panels
+    // can show through. WS_CLIPSIBLINGS is still needed for sibling controls.
     HWND panel = CreateWindowExW(WS_EX_CONTROLPARENT,
                                  L"WBBridgePanel", L"",
                                  WS_CHILD | WS_CLIPSIBLINGS,
@@ -277,10 +277,10 @@ HWND CreateBridgeTab(AppState* st, HWND hParent) {
 
     st->hChkTray = MakeCheck(panel, 0, 0, 10, 10, IDC_CHK_MIN_TRAY, L"Minimize to tray", WS_GROUP);
     SendMessageW(st->hChkTray, BM_SETCHECK, BST_CHECKED, 0);
-    // No BS_DEFPUSHBUTTON: that made the button a *permanent* default (always
-    // blue when enabled). The message loop promotes whichever push button has
-    // focus to the default look and demotes it when focus leaves, so the blue
-    // outline follows focus like a real dialog.
+    // Not BS_DEFPUSHBUTTON: that would make the button a permanent default
+    // (always blue when enabled). The message loop promotes whichever push
+    // button has focus to the default look and demotes it when focus leaves,
+    // so the blue outline follows focus like a real dialog.
     st->hBtnToggle = MakeButton(panel, 0, 0, 10, 10, IDC_BTN_TOGGLE, L"Start Bridge");
 
     ApplyUiFontRecursive(panel);
@@ -442,10 +442,9 @@ void RefreshBridgeTabState(AppState* st) {
     // Toggle button gating. Only enable it when there's a definite action:
     //  - Stop is meaningful only when Running/Recovering.
     //  - Start is meaningful only when Stopped/Failed (and selections valid).
-    // The transient Starting/Stopping states leave the button DISABLED so a
-    // click can't trigger Stop()->join() on a worker that's mid-init; that
-    // join would block the GUI thread until the synchronous WASAPI init
-    // returns (and would hang outright on a driver-level init deadlock).
+    // The transient Starting/Stopping states leave the button disabled so the
+    // user cannot stop a worker that's mid-init or start again while teardown
+    // is still in progress.
     int srcSel = static_cast<int>(SendMessageW(st->hCmbSource, CB_GETCURSEL, 0, 0));
     int tgtSel = static_cast<int>(SendMessageW(st->hCmbTarget, CB_GETCURSEL, 0, 0));
     bool selectionsOk = (srcSel >= 0 && tgtSel >= 0 && srcSel != tgtSel);

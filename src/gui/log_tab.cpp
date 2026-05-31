@@ -220,8 +220,8 @@ void FlushLogToControl(AppState* st) {
     // The Auto-scroll checkbox is the single source of truth: checked means
     // always tail the latest line (even if the user had scrolled up),
     // unchecked means leave the view exactly where it is. We intentionally do
-    // NOT also gate on "is the view at the bottom" -- that made checked
-    // auto-scroll stop following after any manual scroll-up.
+    // NOT also gate on "is the view at the bottom" -- when auto-scroll is
+    // checked, it should resume following even after any manual scroll-up.
     bool follow        = SendMessageW(st->hChkAutoScroll, BM_GETCHECK, 0, 0) == BST_CHECKED;
     std::wstring chunk = BuildAppendBuffer(lines);
 
@@ -244,7 +244,7 @@ void FlushLogToControl(AppState* st) {
         // bottom, which is exactly where we want it -- no scroll-back, so no
         // flicker. We must NOT freeze redraw here: under WM_SETREDRAW FALSE
         // the edit's scroll math (EM_SCROLLCARET) doesn't settle on the
-        // bottom reliably, which previously broke auto-scroll following.
+        // bottom reliably, so auto-scroll would fail to keep following.
         SendMessageW(st->hEdtLog, EM_SETSEL,
                      static_cast<WPARAM>(len), static_cast<LPARAM>(len));
         SendMessageW(st->hEdtLog, EM_REPLACESEL, FALSE,

@@ -271,8 +271,8 @@ void OnCreate(HWND hwnd, AppState* st) {
     // Build child panels (one per tab). Parented to the *tab control* — the
     // canonical Win32 property-sheet pattern. The panel WndProcs forward
     // WM_COMMAND/WM_NOTIFY to the root window so existing handlers still fire.
-    // Earlier attempts that parented panels to the main window left the tab
-    // control's themed body painting on top of them and produced empty tabs.
+    // Parenting panels outside the tab control lets the tab control's themed
+    // body paint over them, producing empty-looking tabs.
     st->panels[0] = CreateBridgeTab(st, st->hTab);
     st->panels[1] = CreateLogTab(st, st->hTab);
     st->panels[2] = CreateAboutTab(st, st->hTab);
@@ -288,10 +288,9 @@ void OnCreate(HWND hwnd, AppState* st) {
     RescanDevices(st);
     RehydrateLogControl(st);
 
-    // Note: previously we explicitly SetFocus(st->hCmbSource) here so the
-    // first Tab keypress would find an anchor, but with WS_EX_CONTROLPARENT
-    // on both the top-level window and the tab control IsDialogMessageW now
-    // discovers the first tabstop on its own.
+    // No explicit initial SetFocus call is needed: with WS_EX_CONTROLPARENT on
+    // the top-level window and the visible panel, IsDialogMessageW discovers
+    // the first tabstop on the first Tab keypress.
 
     // Periodic refresh for the bridge state label / tray tooltip.
     SetTimer(hwnd, kStateTimerId, kStateTimerMs, nullptr);
@@ -331,10 +330,9 @@ void OnTabSelChange(AppState* st) {
     // until the next live append.
     if (sel == 1) LogTabOnShow(st);
 
-    // Note: previously we explicitly SetFocus on the first tabstop here,
-    // but with WS_EX_CONTROLPARENT on the main window, the tab control,
-    // and the active panel, IsDialogMessageW handles Tab navigation
-    // correctly without needing an explicit anchor.
+    // No explicit focus anchor is needed on tab switches: with
+    // WS_EX_CONTROLPARENT on the main window, the tab control, and the active
+    // panel, IsDialogMessageW handles Tab navigation correctly.
 }
 
 void OnStateTimer(AppState* st) {

@@ -85,8 +85,8 @@ void BridgeService::Stop() {
     if (wasRunning) {
         SetState(BridgeState::Stopping);
 
-        // Mirrors the original ConsoleCtrlHandler in main.cpp: flip the flag
-        // and kick the wakeup CV so the worker leaves its sleep immediately.
+        // Flip the shared run flag and kick the wakeup CV so the worker leaves
+        // its recovery-loop wait immediately.
         g_keepRunning.store(false);
         g_wakeupCv.notify_all();
     }
@@ -211,8 +211,8 @@ void BridgeService::WorkerMain(BridgeConfig config) {
 
     WB_LOG_INFO("Bridge running. Automatic recovery enabled.");
 
-    // Recovery loop, lifted from the previous main.cpp. The 100 ms timeout
-    // keeps recovery debouncing responsive without busy-spinning.
+    // Recovery loop. The 100 ms timeout keeps recovery debouncing responsive
+    // without busy-spinning.
     while (g_keepRunning.load()) {
         if (g_recoveryState.needsRecovery.load() && !g_recoveryState.isRecovering.load()) {
             int64_t now = get_current_time_ms();

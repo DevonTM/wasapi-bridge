@@ -20,10 +20,10 @@ struct DeviceEntry {
 
 // Enumerate available playback devices and return only the ones that
 // (a) reported at least one native data format and (b) advertise either
-// shared or exclusive mode. Mirrors the filtering logic that used to live in
-// user_interface.cpp so devices the bridge can't actually use never appear in
-// the UI. Internally creates and tears down its own ma_context, so it's safe
-// to call from the GUI thread without coordinating with the bridge worker.
+// shared or exclusive mode, so devices the bridge can't actually use never
+// appear in the UI. Internally creates and tears down its own ma_context, so
+// it's safe to call from the GUI thread without coordinating with the bridge
+// worker.
 //
 // Returns an empty vector on failure (errors are logged via Logger).
 std::vector<DeviceEntry> EnumeratePlaybackDevices();
