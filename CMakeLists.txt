@@ -52,7 +52,7 @@ else()
         COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic;-Wshadow")
 endif()
 
-add_definitions(-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE)
+add_definitions(-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE -DNOMINMAX)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
