@@ -27,7 +27,6 @@
 #define IDC_EDT_LATENCY             211
 #define IDC_LBL_LATENCY_UNIT        212
 #define IDC_LBL_LATENCY_HINT        213
-#define IDC_LBL_STATE_CAPTION       214
 #define IDC_LBL_STATE               215
 #define IDC_BTN_TOGGLE              216
 #define IDC_CHK_MIN_TRAY            217
@@ -47,7 +46,6 @@
 #define IDC_LBL_APP_VERSION         403
 #define IDC_LNK_LICENSE             404
 #define IDC_BTN_GITHUB              405
-#define IDC_LBL_TAGLINE             406
 
 // Tray menu commands (1000+).
 #define IDM_TRAY_OPEN               1001

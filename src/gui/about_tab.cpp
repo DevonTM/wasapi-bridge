@@ -222,7 +222,6 @@ void LayoutAboutTab(AppState* st, int panelW, int panelH) {
     SetWindowPos(btn, nullptr, centerX(btnW), y, btnW, btnH,
                  SWP_NOZORDER | SWP_NOACTIVATE);
 
-    (void)lblName;
     InvalidateRect(panel, nullptr, TRUE);
 }
 

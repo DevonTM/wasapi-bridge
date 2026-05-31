@@ -264,12 +264,8 @@ HWND CreateBridgeTab(AppState* st, HWND hParent) {
                               SS_CENTERIMAGE);
 
     // Bottom row: minimize-to-tray checkbox on the left, state dot+text in
-    // the centre, Start/Stop button on the right. The "State" caption is
-    // dropped — the coloured dot + word ("Stopped"/"Running") is enough.
-    // We still create an invisible IDC_LBL_STATE_CAPTION because earlier
-    // logic used GetDlgItem against it; an empty hidden static is harmless.
-    HWND hStateCap = MakeStatic(panel, 0, 0, 0, 0, IDC_LBL_STATE_CAPTION, L"");
-    ShowWindow(hStateCap, SW_HIDE);
+    // the centre, Start/Stop button on the right. The coloured dot + word
+    // ("Stopped"/"Running") is enough; no separate "State" caption needed.
 
     // Dot is owner-drawn (WM_DRAWITEM) so we can render a real filled circle
     // that sits at the optical centre of the row, independent of font
