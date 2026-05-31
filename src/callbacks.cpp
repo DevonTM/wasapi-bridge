@@ -1,6 +1,6 @@
 #include "callbacks.h"
 #include "types.h"
-#include <iostream>
+#include "gui/logger.h"
 #include <algorithm>
 #include <cstring>
 
@@ -33,25 +33,25 @@ void device_notification_callback(const ma_device_notification* pNotification) {
 
     switch (pNotification->type) {
         case ma_device_notification_type_stopped:
-            std::cout << "\n[NOTIFICATION] " << deviceType << " device stopped unexpectedly\n";
+            WB_LOG_NOTIFY("%s device stopped unexpectedly", deviceType);
             g_recoveryState.devicesRunning = false;
             wakeMainLoop();
             break;
 
         case ma_device_notification_type_rerouted:
-            std::cout << "\n[NOTIFICATION] " << deviceType << " device rerouted\n";
+            WB_LOG_NOTIFY("%s device rerouted", deviceType);
             g_recoveryState.devicesRunning = false;
             wakeMainLoop();
             break;
 
         case ma_device_notification_type_interruption_began:
-            std::cout << "\n[NOTIFICATION] " << deviceType << " device interruption began\n";
+            WB_LOG_NOTIFY("%s device interruption began", deviceType);
             g_recoveryState.devicesRunning = false;
             wakeMainLoop();
             break;
 
         case ma_device_notification_type_interruption_ended:
-            std::cout << "\n[NOTIFICATION] " << deviceType << " device interruption ended\n";
+            WB_LOG_NOTIFY("%s device interruption ended", deviceType);
             wakeMainLoop();
             break;
 
@@ -70,7 +70,7 @@ void device_notification_callback(const ma_device_notification* pNotification) {
 
 void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
     (void)pOutput;
-    ApplicationData* appData = (ApplicationData*)pDevice->pUserData;
+    ApplicationData* appData = static_cast<ApplicationData*>(pDevice->pUserData);
     if (pInput == nullptr || appData == nullptr) return;
 
     // Load atomic channel counts once for consistency
@@ -90,8 +90,8 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
         if (ma_pcm_rb_acquire_write(&appData->ringBuffer, &chunk, &pWriteBuffer) != MA_SUCCESS) break;
         if (chunk == 0) break; // Ring buffer full
 
-        const float* pSrc = (const float*)pInput + (size_t)framesWritten * sourceChannels;
-        float* pDst = (float*)pWriteBuffer;
+        const float* pSrc = static_cast<const float*>(pInput) + static_cast<size_t>(framesWritten) * sourceChannels;
+        float* pDst = static_cast<float*>(pWriteBuffer);
 
         // Source -> target channel mapping. Per AGENTS.md: positional map,
         // drop unmapped source channels, zero unmapped target channels.
@@ -107,8 +107,8 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
             const ma_uint32 mappedChannels = std::min(sourceChannels, targetChannels);
             const ma_uint32 zeroChannels   = targetChannels - mappedChannels;
             for (ma_uint32 i = 0; i < chunk; ++i) {
-                const float* pFrameSrc = pSrc + (size_t)i * sourceChannels;
-                float*       pFrameDst = pDst + (size_t)i * targetChannels;
+                const float* pFrameSrc = pSrc + static_cast<size_t>(i) * sourceChannels;
+                float*       pFrameDst = pDst + static_cast<size_t>(i) * targetChannels;
                 for (ma_uint32 c = 0; c < mappedChannels; ++c) {
                     pFrameDst[c] = std::clamp(pFrameSrc[c], -1.0f, 1.0f);
                 }
@@ -127,13 +127,13 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
 
 void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
     (void)pInput;
-    ApplicationData* appData = (ApplicationData*)pDevice->pUserData;
+    ApplicationData* appData = static_cast<ApplicationData*>(pDevice->pUserData);
     if (pOutput == nullptr || appData == nullptr) return;
 
     // Load atomic channel count once for consistency
     ma_uint32 targetChannels = appData->targetChannels.load();
 
-    float* pDst = (float*)pOutput;
+    float* pDst = static_cast<float*>(pOutput);
 
     // Loop because ma_pcm_rb_acquire_read may short-return at the sub-buffer
     // boundary. Without this loop the leftover frames are silently dropped,
@@ -148,9 +148,9 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
         if (ma_pcm_rb_acquire_read(&appData->ringBuffer, &chunk, &pReadBuffer) != MA_SUCCESS) break;
         if (chunk == 0) break; // Ring buffer empty (underflow)
 
-        const float* pSrc = (const float*)pReadBuffer;
-        float* pCursor = pDst + (size_t)framesRead * targetChannels;
-        std::memcpy(pCursor, pSrc, (size_t)chunk * targetChannels * sizeof(float));
+        const float* pSrc = static_cast<const float*>(pReadBuffer);
+        float* pCursor = pDst + static_cast<size_t>(framesRead) * targetChannels;
+        std::memcpy(pCursor, pSrc, static_cast<size_t>(chunk) * targetChannels * sizeof(float));
 
         ma_pcm_rb_commit_read(&appData->ringBuffer, chunk);
 
@@ -162,7 +162,7 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
     // all-zero bytes is +0.0f for IEEE-754 floats.
     if (framesRead < frameCount) {
         const ma_uint32 zeroes = (frameCount - framesRead) * targetChannels;
-        float* pTail = pDst + (size_t)framesRead * targetChannels;
-        std::memset(pTail, 0, (size_t)zeroes * sizeof(float));
+        float* pTail = pDst + static_cast<size_t>(framesRead) * targetChannels;
+        std::memset(pTail, 0, static_cast<size_t>(zeroes) * sizeof(float));
     }
 }

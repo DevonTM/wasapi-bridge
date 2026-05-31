@@ -1,112 +1,77 @@
-#include <iostream>
-#include <thread>
-#include <chrono>
+// Single-binary entry point for WASAPI Bridge.
+//
+// Compiled with the WINDOWS subsystem so launching from Explorer doesn't open
+// a stray console. Launching from a terminal still gets log output: we call
+// AttachConsole(ATTACH_PARENT_PROCESS) on startup and re-bind stdout/stderr
+// when that succeeds. This keeps "wasapi-bridge.exe" useful as a one-shot
+// from PowerShell or cmd while still presenting the GUI for normal users.
+
 #include <windows.h>
+#include <cstdio>
+#include <io.h>
+#include <fcntl.h>
 
-#include "version.h"
+#include "gui/logger.h"
+#include "gui/main_window.h"
 #include "types.h"
-#include "callbacks.h"
-#include "device_manager.h"
-#include "user_interface.h"
+#include "version.h"
 
-// Global state definitions
-std::atomic<bool> g_keepRunning{true};
-RecoveryState g_recoveryState;
-std::mutex g_wakeupMutex;
+// Global state definitions (used by callbacks/device_manager).
+std::atomic<bool>       g_keepRunning{true};
+RecoveryState           g_recoveryState;
+std::mutex              g_wakeupMutex;
 std::condition_variable g_wakeupCv;
 
-BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType) {
-    if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_CLOSE_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
-        g_keepRunning = false;
-        g_wakeupCv.notify_one();
-        return TRUE;
+namespace {
+
+// Try to re-attach stdout/stderr to the launching console. Returns true if
+// we now have a usable console (so callers can mirror logs there).
+bool TryAttachToParentConsole() {
+    if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+        return false;
     }
-    return FALSE;
+
+    // Re-open the standard handles. freopen_s with "CONOUT$" is the
+    // canonical recipe; it correctly hooks the C runtime's stdio buffers.
+    FILE* f = nullptr;
+    if (freopen_s(&f, "CONOUT$", "w", stdout) != 0) {
+        // If we attached but failed to bind stdout, nothing useful left to do.
+        return false;
+    }
+    freopen_s(&f, "CONOUT$", "w", stderr);
+    freopen_s(&f, "CONIN$",  "r", stdin);
+
+    // Disable buffering so log lines appear immediately.
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
+
+    // Print a newline so the prompt that issued the command isn't visually
+    // overwritten by our first log line.
+    std::fputc('\n', stdout);
+    return true;
 }
 
-int main() {
-    SetConsoleTitleA("WASAPI Bridge");
-    std::cout << "Starting WASAPI Bridge v" << WB_VERSION << "\n";
+} // namespace
 
-    // Initialize miniaudio context
-    ma_context context;
-    ma_context_config contextConfig = ma_context_config_init();
-    contextConfig.threadPriority = ma_thread_priority_realtime;
+int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR /*pCmdLine*/, int nCmdShow) {
+    // Re-attach to the parent console if we were launched from a terminal.
+    bool console = TryAttachToParentConsole();
+    wb::Logger::Instance().SetConsoleEnabled(console);
 
-    ma_backend backend = ma_backend_wasapi;
-    {
-        ma_result result = ma_context_init(&backend, 1, &contextConfig, &context);
-        if (result != MA_SUCCESS) {
-            std::cerr << "Failed to initialize standard WASAPI context: "
-                      << ma_result_description(result) << " (" << result << ")\n";
-            return -1;
-        }
+    wb::Logger::Instance().Log(wb::LogLevel::Info,
+                               "WASAPI Bridge starting version %s", WB_VERSION);
+
+    int exitCode = wb::RunGui(hInstance, nCmdShow);
+
+    // The GUI window (and the logger's notify target) is already gone here,
+    // so this line only reaches the console/terminal -- a clear closing
+    // marker before the shell prompt returns.
+    wb::Logger::Instance().Log(wb::LogLevel::Info, "WASAPI Bridge exiting");
+
+    if (console) {
+        // Newline so the next shell prompt doesn't crowd our last log line.
+        std::fputc('\n', stdout);
+        FreeConsole();
     }
-
-    // Prompt user for configuration
-    BridgeConfig config;
-    if (!prompt_user_configuration(&context, &config)) {
-        std::cerr << "Failed to configure bridge.\n";
-        ma_context_uninit(&context);
-        return -1;
-    }
-
-    // Initialize devices and application data
-    ma_device sourceDevice;
-    ma_device targetDevice;
-    ApplicationData appData = {};
-
-    std::cout << "\n[INFO] Initializing bridge...\n";
-    if (!initialize_bridge(&context, config, &sourceDevice, &targetDevice, &appData)) {
-        std::cerr << "[ERROR] Failed to initialize bridge\n";
-        ma_context_uninit(&context);
-        return -1;
-    }
-
-    // Mark devices as running after successful initialization
-    g_recoveryState.devicesRunning = true;
-
-    // Set up console control handler and process priority
-    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-
-    std::cout << "\n[INFO] Bridge is running. Press Ctrl+C to quit.\n";
-    std::cout << "[INFO] Automatic recovery enabled - bridge will attempt to recover from device failures.\n";
-
-    // Main loop with recovery handling. Waits on a condition variable so we
-    // wake up immediately on Ctrl+C or a device-state notification instead of
-    // riding out the poll timeout. The 100 ms timeout stays as a safety belt
-    // and as the polling cadence for the 3-second recovery debounce.
-    while (g_keepRunning) {
-        // Check if recovery is needed
-        if (g_recoveryState.needsRecovery && !g_recoveryState.isRecovering) {
-            int64_t currentTime = get_current_time_ms();
-            int64_t timeSinceLastAttempt = currentTime - g_recoveryState.lastRecoveryAttemptMs;
-
-            // Debounce: only attempt recovery if at least 3 seconds have passed
-            if (timeSinceLastAttempt >= 3000) {
-                attempt_recovery(&context, config, &sourceDevice, &targetDevice, &appData);
-            }
-        }
-
-        std::unique_lock<std::mutex> lock(g_wakeupMutex);
-        g_wakeupCv.wait_for(lock, std::chrono::milliseconds(100), [] {
-            return !g_keepRunning ||
-                   (g_recoveryState.needsRecovery && !g_recoveryState.isRecovering);
-        });
-    }
-
-    // Restore normal priority when stopping
-    SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-
-    // Cleanup
-    std::cout << "\n[INFO] Shutting down gracefully...\n";
-    g_recoveryState.devicesRunning = false;
-    bool srcInit = g_recoveryState.sourceInitialized;
-    bool tgtInit = g_recoveryState.targetInitialized;
-    bool rbInit = g_recoveryState.ringBufferInitialized;
-    cleanup_devices(&sourceDevice, &targetDevice, &appData, &srcInit, &tgtInit, &rbInit);
-    ma_context_uninit(&context);
-
-    return 0;
+    return exitCode;
 }

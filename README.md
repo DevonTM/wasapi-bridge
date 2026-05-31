@@ -11,6 +11,8 @@ A low-latency C++ tool to route audio from a WASAPI loopback device (such as "CA
 - **WASAPI Modes**: Supports configurable target output logic using either **Shared Mode** or **Exclusive Mode**.
 - **Real-Time Configuration**: Prompts the user smoothly for Source Device, Target Device, Latency offsets, and limits.
 - **Optimized**: Compile with native LTO & static linking ensuring blazing-fast execution speeds without overhead.
+- **GUI + Terminal-Aware**: Native Win32 GUI with three tabs (Bridge / Log / About). Launching from a terminal attaches to the parent console so logs flow back into the shell that started it; launching from Explorer just shows the GUI.
+- **Tray Integration**: Optional minimize-to-tray with right-click Open/Exit menu and live-state tooltip.
 
 ## Setup Requirements
 
@@ -38,13 +40,15 @@ ninja
 
 ## Usage
 
-Simply run the executable and follow the command-line prompts. You will be asked to:
-1. Select your Source Audio Device (Loopback device that you want to capture).
-2. Select your Target Audio Device (Hardware speaker/DAC).
-3. Select Shared or Exclusive mode (Exclusive prevents other applications from using the target device).
-4. Specify target Latency in milliseconds (defaults to 10ms for Shared, 5ms for Exclusive).
+Run `wasapi-bridge.exe`. The GUI opens with three tabs:
 
-To quit the application gracefully and release audio locks, press `Ctrl+C` or close the console window.
+- **Bridge** — pick the Source loopback device and the Target playback device, choose Shared or Exclusive mode, set latency in ms (defaults: 10 for Shared, 5 for Exclusive), and click **Start Bridge**. The button toggles to **Stop Bridge** while running and inputs lock until you stop. Use **Rescan** after plugging or unplugging audio devices.
+- **Log** — live log mirroring everything the bridge prints. Toggle auto-scroll, export to a UTF-8 file, or clear.
+- **About** — version, license link, and a button to open the GitHub repo.
+
+Tick **Minimize to tray** (default on) to send the window to the notification area on minimize. The tray icon shows a tooltip with the current bridge state and offers Open/Exit on right-click.
+
+When launched from a terminal (`.\wasapi-bridge.exe` from cmd or PowerShell), the app attaches to the parent console and mirrors log output there. Launched from Explorer it just shows the GUI without opening a console.
 
 ## License
 
