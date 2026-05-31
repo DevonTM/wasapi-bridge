@@ -5,7 +5,7 @@
 // here; both the About tab (WB_VERSION) and the .rc VERSIONINFO block
 // (which includes this file) derive from them.
 #define WB_VERSION_MAJOR 0
-#define WB_VERSION_MINOR 4
+#define WB_VERSION_MINOR 5
 #define WB_VERSION_PATCH 0
 
 // Stringize helpers: WB_VER_STR(WB_VERSION_MAJOR) -> "0", etc. The two-level
