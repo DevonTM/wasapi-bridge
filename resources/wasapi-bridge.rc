@@ -1,11 +1,12 @@
 #include <winres.h>
+#include "wasapi-bridge.generated.rc.h"
 #include "../src/gui/resource.h"
 #include "../src/version.h"
 
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 #define RT_MANIFEST 24
-1 RT_MANIFEST "wasapi-bridge.manifest"
+1 RT_MANIFEST WB_MANIFEST_PATH
 
 IDI_APP_ICON ICON "wasapi-bridge.ico"
 

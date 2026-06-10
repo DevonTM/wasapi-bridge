@@ -3,7 +3,7 @@
   <assemblyIdentity
     type="win32"
     name="DevonTM.WasapiBridge.App"
-    version="1.0.0.0"
+    version="@WB_MANIFEST_VERSION@"
     processorArchitecture="*"
   />
   <description>WASAPI Bridge</description>

@@ -7,6 +7,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio)
 
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h" WB_VERSION_HEADER)
+string(REGEX MATCH "#define[ 	]+WB_VERSION_MAJOR[ 	]+([0-9]+)" _ "${WB_VERSION_HEADER}")
+set(WB_VERSION_MAJOR "${CMAKE_MATCH_1}")
+string(REGEX MATCH "#define[ 	]+WB_VERSION_MINOR[ 	]+([0-9]+)" _ "${WB_VERSION_HEADER}")
+set(WB_VERSION_MINOR "${CMAKE_MATCH_1}")
+string(REGEX MATCH "#define[ 	]+WB_VERSION_PATCH[ 	]+([0-9]+)" _ "${WB_VERSION_HEADER}")
+set(WB_VERSION_PATCH "${CMAKE_MATCH_1}")
+set(WB_MANIFEST_VERSION "${WB_VERSION_MAJOR}.${WB_VERSION_MINOR}.${WB_VERSION_PATCH}.0")
+
+set(WB_GENERATED_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources")
+set(WB_MANIFEST_PATH "${WB_GENERATED_RESOURCE_DIR}/wasapi-bridge.manifest")
+set(WB_MANIFEST_RC_PATH "resources/wasapi-bridge.manifest")
+
+configure_file(
+    resources/wasapi-bridge.manifest.in
+    "${WB_MANIFEST_PATH}"
+    @ONLY
+)
+configure_file(
+    resources/wasapi-bridge.generated.rc.h.in
+    "${WB_GENERATED_RESOURCE_DIR}/wasapi-bridge.generated.rc.h"
+    @ONLY
+)
+
 set(PROJECT_SOURCES
     src/main.cpp
     src/callbacks.cpp
@@ -42,6 +66,7 @@ set_source_files_properties(resources/wasapi-bridge.rc PROPERTIES
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${WB_GENERATED_RESOURCE_DIR}
 )
 
 if(MSVC)
