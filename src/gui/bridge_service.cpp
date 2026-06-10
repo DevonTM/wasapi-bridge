@@ -156,6 +156,12 @@ bool BridgeService::TryGracefulStop(unsigned timeoutMs) {
 }
 
 namespace {
+#ifndef NDEBUG
+constexpr bool kEnableRingStatsLog = true;
+#else
+constexpr bool kEnableRingStatsLog = false;
+#endif
+
 // RAII guard: sets an atomic<bool> true when it goes out of scope. Used so
 // WorkerMain marks workerExited_ on *every* return path (context-init fail,
 // bridge-init fail, or normal shutdown) without repeating the store.
@@ -210,6 +216,12 @@ void BridgeService::WorkerMain(BridgeConfig config) {
     SetState(BridgeState::Running);
 
     WB_LOG_INFO("Bridge running. Automatic recovery enabled.");
+#ifndef NDEBUG
+    auto lastStatsLog = std::chrono::steady_clock::now();
+    ma_uint64 lastOverflows = 0;
+    ma_uint64 lastUnderflows = 0;
+    ma_uint64 lastInactiveUnderflows = 0;
+#endif
 
     // Recovery loop. The 100 ms timeout keeps recovery debouncing responsive
     // without busy-spinning.
@@ -223,6 +235,39 @@ void BridgeService::WorkerMain(BridgeConfig config) {
                 SetState(ok ? BridgeState::Running : BridgeState::Recovering);
             }
         }
+
+#ifndef NDEBUG
+        if constexpr (kEnableRingStatsLog) {
+            auto nowStats = std::chrono::steady_clock::now();
+            if (nowStats - lastStatsLog >= std::chrono::seconds(1)) {
+                lastStatsLog = nowStats;
+                ma_uint64 overflows = appData.overflowFrames.load();
+                ma_uint64 underflows = appData.underflowFrames.load();
+                ma_uint64 inactiveUnderflows = appData.inactiveUnderflowFrames.load();
+                ma_uint32 minFill = appData.minFillFrames.exchange(UINT32_MAX);
+                ma_uint32 maxFill = appData.maxFillFrames.exchange(0);
+                if (minFill == UINT32_MAX) minFill = appData.lastFillFrames.load();
+
+                WB_LOG_INFO("Ring stats: %s fill=%u frames, min=%u, max=%u, prefill=%u, overflow +%llu total=%llu, active underflow +%llu total=%llu, inactive +%llu total=%llu, callbacks C/P=%llu/%llu",
+                            appData.streamActive.load() ? "active" : "prefill",
+                            appData.lastFillFrames.load(),
+                            minFill,
+                            maxFill,
+                            appData.prefillFrames.load(),
+                            static_cast<unsigned long long>(overflows - lastOverflows),
+                            static_cast<unsigned long long>(overflows),
+                            static_cast<unsigned long long>(underflows - lastUnderflows),
+                            static_cast<unsigned long long>(underflows),
+                            static_cast<unsigned long long>(inactiveUnderflows - lastInactiveUnderflows),
+                            static_cast<unsigned long long>(inactiveUnderflows),
+                            static_cast<unsigned long long>(appData.captureCallbacks.load()),
+                            static_cast<unsigned long long>(appData.playbackCallbacks.load()));
+                lastOverflows = overflows;
+                lastUnderflows = underflows;
+                lastInactiveUnderflows = inactiveUnderflows;
+            }
+        }
+#endif
 
         std::unique_lock<std::mutex> lock(g_wakeupMutex);
         g_wakeupCv.wait_for(lock, std::chrono::milliseconds(100), [] {

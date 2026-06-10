@@ -45,6 +45,18 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     // Reset application data
     appData->sourceChannels.store(2);
     appData->targetChannels.store(2);
+#ifndef NDEBUG
+    appData->captureCallbacks.store(0);
+    appData->playbackCallbacks.store(0);
+    appData->overflowFrames.store(0);
+    appData->underflowFrames.store(0);
+    appData->inactiveUnderflowFrames.store(0);
+    appData->lastFillFrames.store(0);
+    appData->minFillFrames.store(UINT32_MAX);
+    appData->maxFillFrames.store(0);
+#endif
+    appData->prefillFrames.store(0);
+    appData->streamActive.store(false);
 
     // Initialize source device (loopback)
     ma_device_config sourceConfig = ma_device_config_init(ma_device_type_loopback);
@@ -66,9 +78,11 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     }
 
     appData->sourceChannels.store(sourceDevice->capture.channels);
-    WB_LOG_INFO("Source device initialized at %u Hz, %u channels",
+    WB_LOG_INFO("Source device initialized: client %u Hz, internal %u Hz, %u channels, period %u frames",
+                sourceDevice->sampleRate,
                 sourceDevice->capture.internalSampleRate,
-                appData->sourceChannels.load());
+                appData->sourceChannels.load(),
+                sourceDevice->capture.internalPeriodSizeInFrames);
 
     // Initialize target device (playback)
     ma_device_config targetConfig = ma_device_config_init(ma_device_type_playback);
@@ -94,9 +108,11 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
     }
 
     appData->targetChannels.store(targetDevice->playback.channels);
-    WB_LOG_INFO("Target device initialized at %u Hz, %u channels",
+    WB_LOG_INFO("Target device initialized: client %u Hz, internal %u Hz, %u channels, period %u frames",
+                targetDevice->sampleRate,
                 targetDevice->playback.internalSampleRate,
-                appData->targetChannels.load());
+                appData->targetChannels.load(),
+                targetDevice->playback.internalPeriodSizeInFrames);
 
     // Size the ring buffer based on actual period sizes chosen by miniaudio.
     // Use a single sub-buffer: ma_rb_acquire_read returns "available" bounded
@@ -112,11 +128,18 @@ bool initialize_bridge(ma_context* context, const BridgeConfig& config,
         maxPeriod = sourceDevice->sampleRate / 100; // ~10 ms
     }
 
-    ma_uint32 totalFrames = maxPeriod * 4;
+    ma_uint32 totalFrames = maxPeriod * 6;
+    ma_uint32 prefillFrames = maxPeriod * 3;
+    if (prefillFrames >= totalFrames) {
+        prefillFrames = totalFrames > maxPeriod ? totalFrames - maxPeriod : maxPeriod;
+    }
+    appData->prefillFrames.store(prefillFrames);
 
-    WB_LOG_INFO("Ring buffer: %u frames (~%u ms)",
+    WB_LOG_INFO("Ring buffer: %u frames (~%u ms), prefill %u frames (~%u ms)",
                 totalFrames,
-                totalFrames * 1000 / sourceDevice->sampleRate);
+                totalFrames * 1000 / sourceDevice->sampleRate,
+                prefillFrames,
+                prefillFrames * 1000 / sourceDevice->sampleRate);
 
     // Initialize ring buffer
     {

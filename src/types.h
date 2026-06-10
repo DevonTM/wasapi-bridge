@@ -10,6 +10,18 @@ struct ApplicationData {
     ma_pcm_rb ringBuffer;
     std::atomic<ma_uint32> sourceChannels;
     std::atomic<ma_uint32> targetChannels;
+#ifndef NDEBUG
+    std::atomic<ma_uint64> captureCallbacks;
+    std::atomic<ma_uint64> playbackCallbacks;
+    std::atomic<ma_uint64> overflowFrames;
+    std::atomic<ma_uint64> underflowFrames;
+    std::atomic<ma_uint64> inactiveUnderflowFrames;
+    std::atomic<ma_uint32> lastFillFrames;
+    std::atomic<ma_uint32> minFillFrames;
+    std::atomic<ma_uint32> maxFillFrames;
+#endif
+    std::atomic<ma_uint32> prefillFrames;
+    std::atomic<bool> streamActive;
 };
 
 struct BridgeConfig {

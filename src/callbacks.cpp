@@ -4,6 +4,24 @@
 #include <algorithm>
 #include <cstring>
 
+#ifndef NDEBUG
+namespace {
+void update_fill_stats(ApplicationData* appData) {
+    ma_int32 distance = ma_pcm_rb_pointer_distance(&appData->ringBuffer);
+    ma_uint32 fill = distance > 0 ? static_cast<ma_uint32>(distance) : 0;
+    appData->lastFillFrames.store(fill);
+
+    ma_uint32 oldMin = appData->minFillFrames.load();
+    while (fill < oldMin && !appData->minFillFrames.compare_exchange_weak(oldMin, fill)) {
+    }
+
+    ma_uint32 oldMax = appData->maxFillFrames.load();
+    while (fill > oldMax && !appData->maxFillFrames.compare_exchange_weak(oldMax, fill)) {
+    }
+}
+} // namespace
+#endif
+
 void device_notification_callback(const ma_device_notification* pNotification) {
     if (!pNotification || !pNotification->pDevice) {
         return;
@@ -76,6 +94,10 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
     // Load atomic channel counts once for consistency
     ma_uint32 sourceChannels = appData->sourceChannels.load();
     ma_uint32 targetChannels = appData->targetChannels.load();
+    const float* input = static_cast<const float*>(pInput);
+#ifndef NDEBUG
+    appData->captureCallbacks.fetch_add(1);
+#endif
 
     // Loop because ma_pcm_rb_acquire_write may short-return at the sub-buffer
     // boundary. Without this loop the leftover frames are silently dropped,
@@ -90,7 +112,7 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
         if (ma_pcm_rb_acquire_write(&appData->ringBuffer, &chunk, &pWriteBuffer) != MA_SUCCESS) break;
         if (chunk == 0) break; // Ring buffer full
 
-        const float* pSrc = static_cast<const float*>(pInput) + static_cast<size_t>(framesWritten) * sourceChannels;
+        const float* pSrc = input + static_cast<size_t>(framesWritten) * sourceChannels;
         float* pDst = static_cast<float*>(pWriteBuffer);
 
         // Source -> target channel mapping. Per AGENTS.md: positional map,
@@ -123,6 +145,13 @@ void capture_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
         framesWritten += chunk;
         remaining     -= chunk;
     }
+
+#ifndef NDEBUG
+    if (remaining > 0) {
+        appData->overflowFrames.fetch_add(remaining);
+    }
+    update_fill_stats(appData);
+#endif
 }
 
 void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
@@ -132,8 +161,26 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
 
     // Load atomic channel count once for consistency
     ma_uint32 targetChannels = appData->targetChannels.load();
+#ifndef NDEBUG
+    appData->playbackCallbacks.fetch_add(1);
+#endif
 
     float* pDst = static_cast<float*>(pOutput);
+
+    if (!appData->streamActive.load()) {
+        ma_uint32 available = ma_pcm_rb_available_read(&appData->ringBuffer);
+        if (available < appData->prefillFrames.load()) {
+#ifndef NDEBUG
+            appData->inactiveUnderflowFrames.fetch_add(frameCount);
+#endif
+            std::memset(pDst, 0, static_cast<size_t>(frameCount) * targetChannels * sizeof(float));
+#ifndef NDEBUG
+            update_fill_stats(appData);
+#endif
+            return;
+        }
+        appData->streamActive.store(true);
+    }
 
     // Loop because ma_pcm_rb_acquire_read may short-return at the sub-buffer
     // boundary. Without this loop the leftover frames are silently dropped,
@@ -161,8 +208,15 @@ void playback_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma
     // Fill remainder with zeroes stringently (handle underflow). memset of
     // all-zero bytes is +0.0f for IEEE-754 floats.
     if (framesRead < frameCount) {
+#ifndef NDEBUG
+        appData->underflowFrames.fetch_add(frameCount - framesRead);
+#endif
+        appData->streamActive.store(false);
         const ma_uint32 zeroes = (frameCount - framesRead) * targetChannels;
         float* pTail = pDst + static_cast<size_t>(framesRead) * targetChannels;
         std::memset(pTail, 0, static_cast<size_t>(zeroes) * sizeof(float));
     }
+#ifndef NDEBUG
+    update_fill_stats(appData);
+#endif
 }
