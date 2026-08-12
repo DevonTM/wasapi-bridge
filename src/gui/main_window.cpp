@@ -32,6 +32,7 @@ bool ConfirmExitWhileRunning(AppState* st);
 void RefocusExitConfirmation(AppState* st);
 void HandleClose(AppState* st);
 void HandleSysCommand(AppState* st, WPARAM cmd);
+void ActivateMainWindow(AppState* st);
 void RestoreFromTray(AppState* st);
 void TabAreaToRect(HWND hTab, RECT& outDisplay);
 
@@ -462,13 +463,32 @@ void HandleSysCommand(AppState* st, WPARAM cmd) {
     DefWindowProcW(st->hMain, WM_SYSCOMMAND, cmd, 0);
 }
 
-void RestoreFromTray(AppState* st) {
-    ShowWindow(st->hMain, SW_SHOW);
-    if (IsIconic(st->hMain)) {
-        ShowWindow(st->hMain, SW_RESTORE);
+void ActivateMainWindow(AppState* st) {
+    HWND hwnd = st->hMain;
+    ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+
+    // An explicit second launch is an activation request. Temporarily joining
+    // the foreground thread's input queue lets this process pass the
+    // foreground lock even when another top-level window currently owns it.
+    HWND foreground = GetForegroundWindow();
+    DWORD targetThread = GetWindowThreadProcessId(hwnd, nullptr);
+    DWORD foregroundThread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
+    bool attached = foregroundThread && targetThread && foregroundThread != targetThread &&
+                    AttachThreadInput(foregroundThread, targetThread, TRUE);
+    BringWindowToTop(hwnd);
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetForegroundWindow(hwnd);
+    SetActiveWindow(hwnd);
+    if (attached) {
+        AttachThreadInput(foregroundThread, targetThread, FALSE);
     }
-    SetForegroundWindow(st->hMain);
+
     TrayHide(st);
+}
+
+void RestoreFromTray(AppState* st) {
+    ActivateMainWindow(st);
 }
 
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -548,6 +568,10 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_APP_LOG_PUSHED:
             if (st) OnLogPushed(st);
+            return 0;
+
+        case WM_APP_ACTIVATE_EXISTING:
+            if (st) ActivateMainWindow(st);
             return 0;
 
         case WM_APP_TRAYICON: {

@@ -18,8 +18,9 @@ namespace wb {
 // thread. Keep them clustered here so we can see at a glance which IDs
 // are taken.
 enum : UINT {
-    WM_APP_LOG_PUSHED  = WM_APP + 1,  // Logger -> log tab
-    WM_APP_TRAYICON    = WM_APP + 2,  // Tray icon callback
+    WM_APP_LOG_PUSHED        = WM_APP + 1,  // Logger -> log tab
+    WM_APP_TRAYICON          = WM_APP + 2,  // Tray icon callback
+    WM_APP_ACTIVATE_EXISTING = WM_APP + 3,  // Second launch -> main window
 };
 
 constexpr UINT_PTR kStateTimerId = 1;
