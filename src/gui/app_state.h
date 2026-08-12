@@ -75,6 +75,7 @@ struct AppState {
     // bridge reaches Running (only if the user hasn't pressed Tab meanwhile).
     bool wantRefocusToggle = false;
     bool trayIconVisible = false;
+    bool exitInProgress = false;
     bool logFlushPending = false;
     BridgeState lastSeenState = BridgeState::Stopped;
 };

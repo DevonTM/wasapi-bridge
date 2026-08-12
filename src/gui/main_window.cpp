@@ -29,6 +29,7 @@ void OnTabSelChange(AppState* st);
 void OnStateTimer(AppState* st);
 void OnLogPushed(AppState* st);
 bool ConfirmExitWhileRunning(AppState* st);
+void RefocusExitConfirmation(AppState* st);
 void HandleClose(AppState* st);
 void HandleSysCommand(AppState* st, WPARAM cmd);
 void RestoreFromTray(AppState* st);
@@ -375,8 +376,28 @@ bool ConfirmExitWhileRunning(AppState* st) {
     return rc == IDYES;
 }
 
+void RefocusExitConfirmation(AppState* st) {
+    HWND popup = GetLastActivePopup(st->hMain);
+    if (!popup || popup == st->hMain || !IsWindowVisible(popup) ||
+        GetWindow(popup, GW_OWNER) != st->hMain) {
+        return;
+    }
+    BringWindowToTop(popup);
+    SetForegroundWindow(popup);
+}
+
 void HandleClose(AppState* st) {
+    // Tray commands can re-enter the window proc while MessageBoxW runs its
+    // modal message loop. Keep the first confirmation active and refocus it
+    // when a subsequent tray Exit command arrives.
+    if (st->exitInProgress) {
+        RefocusExitConfirmation(st);
+        return;
+    }
+    st->exitInProgress = true;
+
     if (!ConfirmExitWhileRunning(st)) {
+        st->exitInProgress = false;
         return; // user cancelled
     }
     // Stop the worker without risking an indefinite hang on exit. Normally
