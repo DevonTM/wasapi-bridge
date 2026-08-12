@@ -376,14 +376,51 @@ bool ConfirmExitWhileRunning(AppState* st) {
     return rc == IDYES;
 }
 
+struct OwnedDialogSearch {
+    HWND owner = nullptr;
+    HWND dialog = nullptr;
+};
+
+BOOL CALLBACK FindOwnedMessageBox(HWND hwnd, LPARAM lp) {
+    auto* search = reinterpret_cast<OwnedDialogSearch*>(lp);
+    if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != search->owner) {
+        return TRUE;
+    }
+    wchar_t className[16];
+    if (GetClassNameW(hwnd, className, _countof(className)) > 0 &&
+        lstrcmpW(className, L"#32770") == 0) {
+        search->dialog = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
 void RefocusExitConfirmation(AppState* st) {
-    HWND popup = GetLastActivePopup(st->hMain);
+    OwnedDialogSearch search{st->hMain};
+    EnumThreadWindows(GetCurrentThreadId(), FindOwnedMessageBox,
+                      reinterpret_cast<LPARAM>(&search));
+    HWND popup = search.dialog;
+    if (!popup) {
+        popup = GetLastActivePopup(st->hMain);
+    }
     if (!popup || popup == st->hMain || !IsWindowVisible(popup) ||
         GetWindow(popup, GW_OWNER) != st->hMain) {
         return;
     }
+
+    HWND foreground = GetForegroundWindow();
+    DWORD popupThread = GetWindowThreadProcessId(popup, nullptr);
+    DWORD foregroundThread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
+    bool attached = foregroundThread && popupThread && foregroundThread != popupThread &&
+                    AttachThreadInput(foregroundThread, popupThread, TRUE);
     BringWindowToTop(popup);
+    SetWindowPos(popup, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     SetForegroundWindow(popup);
+    SetActiveWindow(popup);
+    if (attached) {
+        AttachThreadInput(foregroundThread, popupThread, FALSE);
+    }
 }
 
 void HandleClose(AppState* st) {
@@ -525,6 +562,13 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+
+        // TrayPopupMenu posts this after TrackPopupMenu has fully closed. The
+        // immediate refocus in HandleClose can otherwise be undone by the
+        // menu's activation cleanup.
+        case WM_NULL:
+            if (st && st->exitInProgress) RefocusExitConfirmation(st);
+            return 0;
 
         case WM_SYSCOMMAND:
             if (st) {
