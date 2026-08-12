@@ -15,7 +15,7 @@
 - Use ring buffer.
 - Use miniaudio library.
 - Use C or C++.
-- Use CMake and Ninja build system. Use `-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64` since my CMake is detected as msys2/cygwin instead of MinGW.
+- Use CMake and Ninja build system.
 - Good project structure.
 
 ## File-editing rules
