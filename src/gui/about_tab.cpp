@@ -5,6 +5,7 @@
 
 #include "../version.h"
 #include "resource.h"
+#include "bridge_tab.h"
 #include "ui_utils.h"
 
 // Some MinGW commctrl.h versions ship LM_GETIDEALHEIGHT but not the
@@ -139,6 +140,14 @@ HWND CreateAboutTab(AppState* st, HWND hParent) {
                                st->hInstance, nullptr);
     ApplyUiFont(btn);
 
+    HWND reset = CreateWindowExW(0, L"BUTTON", L"Reset settings to defaults",
+                                 WS_CHILD | WS_VISIBLE | WS_GROUP | WS_TABSTOP | BS_PUSHBUTTON,
+                                 M, y + 40, 220, 30, panel,
+                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_BTN_RESET_SETTINGS)),
+                                 st->hInstance, nullptr);
+    ApplyUiFont(reset);
+    st->hBtnResetSettings = reset;
+
     return panel;
 }
 
@@ -169,6 +178,7 @@ void LayoutAboutTab(AppState* st, int panelW, int panelH) {
     HWND lblVer  = GetDlgItem(panel, IDC_LBL_APP_VERSION);
     HWND link    = GetDlgItem(panel, IDC_LNK_LICENSE);
     HWND btn     = GetDlgItem(panel, IDC_BTN_GITHUB);
+    HWND reset   = GetDlgItem(panel, IDC_BTN_RESET_SETTINGS);
 
     // Per-element sizes.
     const int iconSz = 64;
@@ -176,6 +186,7 @@ void LayoutAboutTab(AppState* st, int panelW, int panelH) {
     const int verH   = 20;
     const int linkH  = 22;
     const int btnW   = 220;
+    const int resetW = 220;
     const int btnH   = 30;
 
     // Vertical gaps between stack items (compact 64px layout). gNameVer/
@@ -186,8 +197,9 @@ void LayoutAboutTab(AppState* st, int panelW, int panelH) {
     const int gVerLink  = 6;
     const int gLinkBtn  = 10;
 
+    const int gBtnReset = 10;
     int stackH = iconSz + gIconName + nameH + gNameVer + verH +
-                 gVerLink + linkH + gLinkBtn + btnH;
+                 gVerLink + linkH + gLinkBtn + btnH + gBtnReset + btnH;
 
     // Center the whole block vertically (clamp to a small top margin).
     int top = (panelH - stackH) / 2;
@@ -221,6 +233,11 @@ void LayoutAboutTab(AppState* st, int panelW, int panelH) {
     // GitHub button: fixed width, centered.
     SetWindowPos(btn, nullptr, centerX(btnW), y, btnW, btnH,
                  SWP_NOZORDER | SWP_NOACTIVATE);
+    y += btnH + gBtnReset;
+
+    // Reset button: fixed width, centered below the repository button.
+    SetWindowPos(reset, nullptr, centerX(resetW), y, resetW, btnH,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
 
     InvalidateRect(panel, nullptr, TRUE);
 }
@@ -237,9 +254,20 @@ bool HandleAboutNotify(AppState* /*st*/, NMHDR* hdr) {
     return false;
 }
 
-bool HandleAboutCommand(AppState* /*st*/, WORD ctrlId, WORD notifyCode) {
+bool HandleAboutCommand(AppState* st, WORD ctrlId, WORD notifyCode) {
     if (ctrlId == IDC_BTN_GITHUB && notifyCode == BN_CLICKED) {
         ShellExecuteW(nullptr, L"open", kRepoUrl, nullptr, nullptr, SW_SHOWNORMAL);
+        return true;
+    }
+    if (ctrlId == IDC_BTN_RESET_SETTINGS && notifyCode == BN_CLICKED) {
+        int result = MessageBoxW(st->hMain,
+                                 L"Reset all settings to defaults?\n\n"
+                                 L"If the bridge is running, it will be stopped.",
+                                 L"Reset settings",
+                                 MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+        if (result == IDYES) {
+            ResetSettingsToDefaults(st);
+        }
         return true;
     }
     return false;

@@ -483,6 +483,46 @@ void RestoreSettings(AppState* st, const Settings& settings) {
     RefreshBridgeTabState(st);
 }
 
+void ResetSettingsToDefaults(AppState* st) {
+    if (st->bridge) {
+        BridgeState state = st->bridge->State();
+        if (state != BridgeState::Stopped && state != BridgeState::Failed) {
+            WB_LOG_INFO("Stopping bridge before resetting settings.");
+            st->bridge->RequestStop();
+            st->wantRefocusToggle = false;
+        }
+    }
+
+    st->persistedSourceDeviceId.clear();
+    st->persistedTargetDeviceId.clear();
+    st->selectedSourceDevice = {};
+    st->selectedTargetDevice = {};
+    st->modeIsExclusive = false;
+    st->latencyShared = 10;
+    st->latencyExclusive = 5;
+    st->minimizeToTray = true;
+
+    // These direct control updates do not emit the user command notifications
+    // handled below, so reset cannot recurse into SaveCurrentSettings.
+    SendMessageW(st->hCmbSource, CB_SETCURSEL, CB_ERR, 0);
+    SendMessageW(st->hCmbTarget, CB_SETCURSEL, CB_ERR, 0);
+    SendMessageW(st->hRadShared, BM_SETCHECK, BST_CHECKED, 0);
+    SendMessageW(st->hRadExclusive, BM_SETCHECK, BST_UNCHECKED, 0);
+    SendMessageW(st->hChkTray, BM_SETCHECK, BST_CHECKED, 0);
+    WriteLatencyEdit(st);
+
+    Settings settings;
+    settings.sharedLatency = st->latencyShared;
+    settings.exclusiveLatency = st->latencyExclusive;
+    settings.minimizeToTray = st->minimizeToTray;
+    if (SaveSettings(settings)) {
+        WB_LOG_INFO("Reset settings to defaults and saved config.ini.");
+    } else {
+        WB_LOG_WARN("Reset settings to defaults, but saving config.ini failed.");
+    }
+    RefreshBridgeTabState(st);
+}
+
 void SaveCurrentSettings(AppState* st) {
     int currentLatency = ReadLatencyEdit(st);
     if (st->modeIsExclusive) st->latencyExclusive = currentLatency;

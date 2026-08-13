@@ -67,7 +67,8 @@ struct AppState {
     HWND hBtnClear      = nullptr;
 
     // About tab handles
-    HWND hStaticIcon  = nullptr;
+    HWND hStaticIcon       = nullptr;
+    HWND hBtnResetSettings = nullptr;
 
     // App data
     struct DeviceSelection {

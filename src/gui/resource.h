@@ -46,6 +46,7 @@
 #define IDC_LBL_APP_VERSION         403
 #define IDC_LNK_LICENSE             404
 #define IDC_BTN_GITHUB              405
+#define IDC_BTN_RESET_SETTINGS      406
 
 // Tray menu commands (1000+).
 #define IDM_TRAY_OPEN               1001

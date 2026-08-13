@@ -33,6 +33,10 @@ void RefreshBridgeTabState(AppState* st);
 void RestoreSettings(AppState* st, const Settings& settings);
 void SaveCurrentSettings(AppState* st);
 
+// Restore the editable GUI settings and config.ini defaults without touching
+// the bridge worker or its active configuration.
+void ResetSettingsToDefaults(AppState* st);
+
 // Handle WM_COMMAND posted to the panel (forwarded by main window proc).
 // Returns true if the command was handled.
 bool HandleBridgeCommand(AppState* st, WORD ctrlId, WORD notifyCode);
