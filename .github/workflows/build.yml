@@ -28,7 +28,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -58,13 +58,13 @@ jobs:
         Compress-Archive -Path $DIR -DestinationPath $ZIP
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}
         path: wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}
 
     - name: Upload to Release
       if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         files: wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}.zip
