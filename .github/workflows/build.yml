@@ -52,6 +52,7 @@ jobs:
         $DIR = "wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}"
         mkdir $DIR
         Copy-Item build\Release\wasapi-bridge.exe -Destination $DIR\
+        Copy-Item config.example.ini -Destination "$DIR\config.ini"
         Copy-Item LICENSE -Destination $DIR\
         Compress-Archive -Path "$DIR" -DestinationPath "$DIR.zip"
 
