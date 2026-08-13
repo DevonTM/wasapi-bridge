@@ -293,6 +293,8 @@ HWND CreateBridgeTab(AppState* st, HWND hParent) {
     return panel;
 }
 
+void PopulateDeviceCombos(AppState* st);
+
 void RescanDevices(AppState* st) {
     // Per user request: Rescan always wipes the current selection. Forces
     // the user to re-pick consciously after a hardware change.
@@ -307,31 +309,37 @@ void RescanDevices(AppState* st) {
     BufferedPaintStopAllAnimations(st->hCmbSource);
     BufferedPaintStopAllAnimations(st->hCmbTarget);
 
+    st->selectedSourceDevice = {};
+    st->selectedTargetDevice = {};
+    st->devices = EnumeratePlaybackDevices();
+    PopulateDeviceCombos(st);
+
+    WB_LOG_INFO("Found %zu playback device(s).", st->devices.size());
+    RefreshBridgeTabState(st);
+}
+
+void PopulateDeviceCombos(AppState* st) {
     SendMessageW(st->hCmbSource, CB_RESETCONTENT, 0, 0);
     SendMessageW(st->hCmbTarget, CB_RESETCONTENT, 0, 0);
 
-    st->devices = EnumeratePlaybackDevices();
-
     for (size_t i = 0; i < st->devices.size(); ++i) {
         std::wstring wname = Utf8ToWide(st->devices[i].name);
+        // Store an index (plus one), never a pointer into `devices`: the
+        // vector is replaced on every enumeration.
+        LPARAM itemData = static_cast<LPARAM>(i + 1);
         LRESULT idx = SendMessageW(st->hCmbSource, CB_ADDSTRING, 0,
                                    reinterpret_cast<LPARAM>(wname.c_str()));
         if (idx != CB_ERR) {
             SendMessageW(st->hCmbSource, CB_SETITEMDATA,
-                         static_cast<WPARAM>(idx),
-                         reinterpret_cast<LPARAM>(&st->devices[i].id));
+                         static_cast<WPARAM>(idx), itemData);
         }
         idx = SendMessageW(st->hCmbTarget, CB_ADDSTRING, 0,
                            reinterpret_cast<LPARAM>(wname.c_str()));
         if (idx != CB_ERR) {
             SendMessageW(st->hCmbTarget, CB_SETITEMDATA,
-                         static_cast<WPARAM>(idx),
-                         reinterpret_cast<LPARAM>(&st->devices[i].id));
+                         static_cast<WPARAM>(idx), itemData);
         }
     }
-
-    WB_LOG_INFO("Found %zu playback device(s).", st->devices.size());
-    RefreshBridgeTabState(st);
 }
 
 namespace {
@@ -347,16 +355,76 @@ int FindDeviceSelection(const std::vector<DeviceEntry>& devices,
     return CB_ERR;
 }
 
+int ComboDeviceIndex(AppState* st, HWND combo) {
+    int selection = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
+    if (selection < 0) return CB_ERR;
+    LRESULT data = SendMessageW(combo, CB_GETITEMDATA, selection, 0);
+    if (data <= 0 || static_cast<size_t>(data - 1) >= st->devices.size()) return CB_ERR;
+    return static_cast<int>(data - 1);
+}
+
+void CaptureSelectedDevice(AppState* st, HWND combo,
+                          AppState::DeviceSelection& snapshot) {
+    int index = ComboDeviceIndex(st, combo);
+    if (index == CB_ERR) return; // A placeholder keeps its existing snapshot.
+    snapshot.id = std::wstring(st->devices[static_cast<size_t>(index)].id.wasapi);
+    snapshot.displayName = Utf8ToWide(st->devices[static_cast<size_t>(index)].name);
+}
+
 std::wstring SelectedDeviceId(AppState* st, HWND combo,
                               const std::wstring& retained) {
-    int index = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
-    if (index >= 0 && static_cast<size_t>(index) < st->devices.size()) {
+    int index = ComboDeviceIndex(st, combo);
+    if (index != CB_ERR) {
         return std::wstring(st->devices[static_cast<size_t>(index)].id.wasapi);
     }
     return retained;
 }
 
 } // namespace
+
+void AutoRescanDevices(AppState* st) {
+    // Capture both selections before replacing the device vector. The
+    // snapshots are GUI-owned and remain valid while a device is unavailable.
+    CaptureSelectedDevice(st, st->hCmbSource, st->selectedSourceDevice);
+    CaptureSelectedDevice(st, st->hCmbTarget, st->selectedTargetDevice);
+
+    BufferedPaintStopAllAnimations(st->hCmbSource);
+    BufferedPaintStopAllAnimations(st->hCmbTarget);
+    st->devices = EnumeratePlaybackDevices();
+    PopulateDeviceCombos(st);
+
+    auto addUnavailable = [st](HWND combo,
+                               const AppState::DeviceSelection& snapshot) {
+        if (snapshot.id.empty() || FindDeviceSelection(st->devices, snapshot.id) != CB_ERR) {
+            return CB_ERR;
+        }
+        std::wstring label = snapshot.displayName + L" (unavailable)";
+        LRESULT index = SendMessageW(combo, CB_ADDSTRING, 0,
+                                     reinterpret_cast<LPARAM>(label.c_str()));
+        if (index != CB_ERR) {
+            // Zero is reserved for an unavailable placeholder; live entries
+            // use their device index plus one.
+            SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(index), 0);
+        }
+        return static_cast<int>(index);
+    };
+
+    int source = FindDeviceSelection(st->devices, st->selectedSourceDevice.id);
+    int target = FindDeviceSelection(st->devices, st->selectedTargetDevice.id);
+    if (source == CB_ERR) source = addUnavailable(st->hCmbSource, st->selectedSourceDevice);
+    if (target == CB_ERR) target = addUnavailable(st->hCmbTarget, st->selectedTargetDevice);
+    SendMessageW(st->hCmbSource, CB_SETCURSEL, source, 0);
+    SendMessageW(st->hCmbTarget, CB_SETCURSEL, target, 0);
+
+    if (!st->selectedSourceDevice.id.empty() && source == CB_ERR) {
+        WB_LOG_WARN("Auto-rescan: source device unavailable; placeholder retained.");
+    }
+    if (!st->selectedTargetDevice.id.empty() && target == CB_ERR) {
+        WB_LOG_WARN("Auto-rescan: target device unavailable; placeholder retained.");
+    }
+    WB_LOG_INFO("Auto-rescan found %zu playback device(s).", st->devices.size());
+    RefreshBridgeTabState(st);
+}
 
 void RestoreSettings(AppState* st, const Settings& settings) {
     st->persistedSourceDeviceId = settings.sourceDeviceId;
@@ -368,6 +436,14 @@ void RestoreSettings(AppState* st, const Settings& settings) {
 
     int source = FindDeviceSelection(st->devices, settings.sourceDeviceId);
     int target = FindDeviceSelection(st->devices, settings.targetDeviceId);
+    if (source != CB_ERR) {
+        st->selectedSourceDevice.id = settings.sourceDeviceId;
+        st->selectedSourceDevice.displayName = Utf8ToWide(st->devices[static_cast<size_t>(source)].name);
+    }
+    if (target != CB_ERR) {
+        st->selectedTargetDevice.id = settings.targetDeviceId;
+        st->selectedTargetDevice.displayName = Utf8ToWide(st->devices[static_cast<size_t>(target)].name);
+    }
     SendMessageW(st->hCmbSource, CB_SETCURSEL, source, 0);
     SendMessageW(st->hCmbTarget, CB_SETCURSEL, target, 0);
     SendMessageW(st->hRadShared, BM_SETCHECK,
@@ -510,9 +586,10 @@ void RefreshBridgeTabState(AppState* st) {
     // The transient Starting/Stopping states leave the button disabled so the
     // user cannot stop a worker that's mid-init or start again while teardown
     // is still in progress.
-    int srcSel = static_cast<int>(SendMessageW(st->hCmbSource, CB_GETCURSEL, 0, 0));
-    int tgtSel = static_cast<int>(SendMessageW(st->hCmbTarget, CB_GETCURSEL, 0, 0));
-    bool selectionsOk = (srcSel >= 0 && tgtSel >= 0 && srcSel != tgtSel);
+    int srcSel = ComboDeviceIndex(st, st->hCmbSource);
+    int tgtSel = ComboDeviceIndex(st, st->hCmbTarget);
+    bool selectionsOk = (srcSel != CB_ERR && tgtSel != CB_ERR &&
+                         srcSel != tgtSel);
     bool canStop  = (s == BridgeState::Running || s == BridgeState::Recovering);
     bool canStart = selectionsOk && (s == BridgeState::Stopped || s == BridgeState::Failed);
     EnableWindow(st->hBtnToggle, canStop || canStart);
@@ -561,11 +638,15 @@ bool HandleBridgeCommand(AppState* st, WORD ctrlId, WORD notifyCode) {
         case IDC_CMB_TARGET:
             if (notifyCode == CBN_SELCHANGE) {
                 HWND combo = ctrlId == IDC_CMB_SOURCE ? st->hCmbSource : st->hCmbTarget;
-                int index = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
-                if (index >= 0 && static_cast<size_t>(index) < st->devices.size()) {
-                    std::wstring id(st->devices[static_cast<size_t>(index)].id.wasapi);
-                    if (ctrlId == IDC_CMB_SOURCE) st->persistedSourceDeviceId = id;
-                    else st->persistedTargetDeviceId = id;
+                int index = ComboDeviceIndex(st, combo);
+                if (index != CB_ERR) {
+                    auto& snapshot = ctrlId == IDC_CMB_SOURCE
+                                          ? st->selectedSourceDevice
+                                          : st->selectedTargetDevice;
+                    snapshot.id = std::wstring(st->devices[static_cast<size_t>(index)].id.wasapi);
+                    snapshot.displayName = Utf8ToWide(st->devices[static_cast<size_t>(index)].name);
+                    if (ctrlId == IDC_CMB_SOURCE) st->persistedSourceDeviceId = snapshot.id;
+                    else st->persistedTargetDeviceId = snapshot.id;
                 }
                 RefreshBridgeTabState(st);
                 SaveCurrentSettings(st);
@@ -645,11 +726,11 @@ void ToggleBridge(AppState* st) {
         return;
     }
 
-    int srcSel = static_cast<int>(SendMessageW(st->hCmbSource, CB_GETCURSEL, 0, 0));
-    int tgtSel = static_cast<int>(SendMessageW(st->hCmbTarget, CB_GETCURSEL, 0, 0));
-    if (srcSel < 0 || tgtSel < 0 || srcSel == tgtSel) {
+    int srcSel = ComboDeviceIndex(st, st->hCmbSource);
+    int tgtSel = ComboDeviceIndex(st, st->hCmbTarget);
+    if (srcSel == CB_ERR || tgtSel == CB_ERR || srcSel == tgtSel) {
         MessageBoxW(st->hMain,
-                    L"Please pick distinct Source and Target devices first.",
+                    L"Please pick available, distinct Source and Target devices first.",
                     L"WASAPI Bridge", MB_OK | MB_ICONINFORMATION);
         return;
     }

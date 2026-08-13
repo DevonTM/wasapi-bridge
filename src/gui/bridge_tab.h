@@ -20,6 +20,11 @@ void LayoutBridgeTab(AppState* st, int panelW, int panelH);
 // Tries to preserve the previous selection by device ID.
 void RescanDevices(AppState* st);
 
+// Re-enumerate after a device notification while preserving current choices.
+// Missing selected devices remain visible as unavailable placeholders until
+// their exact IDs return.
+void AutoRescanDevices(AppState* st);
+
 // Recompute the enabled/disabled state of inputs and the start button.
 // Call after combo selection changes or when bridge state transitions.
 void RefreshBridgeTabState(AppState* st);

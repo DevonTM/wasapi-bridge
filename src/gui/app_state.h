@@ -9,6 +9,7 @@
 
 #include "bridge_service.h"
 #include "device_enum.h"
+#include "device_notifications.h"
 #include "../types.h"
 #include "miniaudio.h"
 
@@ -21,6 +22,7 @@ enum : UINT {
     WM_APP_LOG_PUSHED        = WM_APP + 1,  // Logger -> log tab
     WM_APP_TRAYICON          = WM_APP + 2,  // Tray icon callback
     WM_APP_ACTIVATE_EXISTING = WM_APP + 3,  // Second launch -> main window
+    WM_APP_DEVICE_CHANGED    = WM_APP + 4,  // Core Audio callback -> GUI
 };
 
 constexpr UINT_PTR kStateTimerId = 1;
@@ -28,6 +30,9 @@ constexpr UINT     kStateTimerMs = 250;
 
 constexpr UINT_PTR kLogFlushTimerId = 2;
 constexpr UINT     kLogFlushMs      = 80;
+
+constexpr UINT_PTR kAutoRescanTimerId = 3;
+constexpr UINT     kAutoRescanMs      = 300;
 
 // Single source of truth for the GUI. The main window proc and helper
 // modules read/write this through pointers stored in window user data.
@@ -65,11 +70,19 @@ struct AppState {
     HWND hStaticIcon  = nullptr;
 
     // App data
+    struct DeviceSelection {
+        std::wstring id;
+        std::wstring displayName;
+    };
     std::unique_ptr<BridgeService> bridge;
     std::vector<DeviceEntry>       devices;
     // Keep requested IDs even when a device is temporarily absent.
     std::wstring persistedSourceDeviceId;
     std::wstring persistedTargetDeviceId;
+    // GUI-owned snapshots avoid pointers into `devices`, which is replaced on
+    // every enumeration. Auto-rescan uses these to render unavailable entries.
+    DeviceSelection selectedSourceDevice;
+    DeviceSelection selectedTargetDevice;
     int latencyShared    = 10;
     int latencyExclusive = 5;
     bool modeIsExclusive = false;  // tracks which radio is currently active
@@ -81,6 +94,10 @@ struct AppState {
     bool trayIconVisible = false;
     bool exitInProgress = false;
     bool logFlushPending = false;
+    bool autoRescanPending = false;
+    bool sourceComboDropdownOpen = false;
+    bool targetComboDropdownOpen = false;
+    DeviceNotificationMonitor deviceNotifications;
     BridgeState lastSeenState = BridgeState::Stopped;
 };
 

@@ -36,6 +36,8 @@ void HandleSysCommand(AppState* st, WPARAM cmd);
 void ActivateMainWindow(AppState* st);
 void RestoreFromTray(AppState* st);
 void TabAreaToRect(HWND hTab, RECT& outDisplay);
+void QueueAutoRescan(AppState* st);
+void OnAutoRescanTimer(AppState* st);
 
 // --- main entry implemented at the bottom of the file ---
 
@@ -303,6 +305,9 @@ void OnCreate(HWND hwnd, AppState* st) {
     RescanDevices(st);
     RestoreSettings(st, LoadSettings());
     RehydrateLogControl(st);
+    if (!st->deviceNotifications.Start(hwnd, WM_APP_DEVICE_CHANGED)) {
+        WB_LOG_WARN("Automatic audio-device rescanning is unavailable; use Rescan manually.");
+    }
 
     // No explicit initial SetFocus call is needed: with WS_EX_CONTROLPARENT on
     // the top-level window and the visible panel, IsDialogMessageW discovers
@@ -359,6 +364,26 @@ void OnStateTimer(AppState* st) {
         RefreshBridgeTabState(st);
         TrayUpdateTooltip(st);
     }
+}
+
+void QueueAutoRescan(AppState* st) {
+    st->autoRescanPending = true;
+    SetTimer(st->hMain, kAutoRescanTimerId, kAutoRescanMs, nullptr);
+}
+
+bool IsComboDropdownOpen(HWND combo) {
+    return combo && SendMessageW(combo, CB_GETDROPPEDSTATE, 0, 0) != FALSE;
+}
+
+void OnAutoRescanTimer(AppState* st) {
+    KillTimer(st->hMain, kAutoRescanTimerId);
+    if (!st->autoRescanPending) return;
+    if (IsComboDropdownOpen(st->hCmbSource) || IsComboDropdownOpen(st->hCmbTarget)) {
+        SetTimer(st->hMain, kAutoRescanTimerId, kAutoRescanMs, nullptr);
+        return;
+    }
+    st->autoRescanPending = false;
+    AutoRescanDevices(st);
 }
 
 void OnLogPushed(AppState* st) {
@@ -562,12 +587,20 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 OnStateTimer(st);
                 return 0;
             }
+            if (wp == kAutoRescanTimerId) {
+                OnAutoRescanTimer(st);
+                return 0;
+            }
             if (wp == kLogFlushTimerId) {
                 KillTimer(hwnd, kLogFlushTimerId);
                 FlushLogToControl(st);
                 return 0;
             }
             break;
+
+        case WM_APP_DEVICE_CHANGED:
+            if (st) QueueAutoRescan(st);
+            return 0;
 
         case WM_APP_LOG_PUSHED:
             if (st) OnLogPushed(st);
@@ -614,9 +647,11 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_DESTROY:
             if (st) {
                 SaveCurrentSettings(st);
+                st->deviceNotifications.Stop();
                 Logger::Instance().SetNotifyWindow(nullptr, 0);
                 TrayHide(st);
                 KillTimer(hwnd, kStateTimerId);
+                KillTimer(hwnd, kAutoRescanTimerId);
             }
             PostQuitMessage(0);
             return 0;

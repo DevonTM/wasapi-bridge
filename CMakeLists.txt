@@ -39,6 +39,7 @@ set(PROJECT_SOURCES
     src/gui/bridge_service.cpp
     src/gui/bridge_tab.cpp
     src/gui/device_enum.cpp
+    src/gui/device_notifications.cpp
     src/gui/log_tab.cpp
     src/gui/logger.cpp
     src/gui/main_window.cpp
