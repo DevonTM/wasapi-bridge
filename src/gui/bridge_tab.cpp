@@ -409,12 +409,39 @@ void AutoRescanDevices(AppState* st) {
         return static_cast<int>(index);
     };
 
-    int source = FindDeviceSelection(st->devices, st->selectedSourceDevice.id);
-    int target = FindDeviceSelection(st->devices, st->selectedTargetDevice.id);
-    if (source == CB_ERR) source = addUnavailable(st->hCmbSource, st->selectedSourceDevice);
-    if (target == CB_ERR) target = addUnavailable(st->hCmbTarget, st->selectedTargetDevice);
+    // A missing persisted ID has no current-run snapshot, so keep its combo
+    // empty until the exact device returns. A snapshot, on the other hand,
+    // means the user selected that device during this run and must retain the
+    // existing unavailable-placeholder behavior.
+    const std::wstring sourceId = st->selectedSourceDevice.id.empty()
+                                      ? st->persistedSourceDeviceId
+                                      : st->selectedSourceDevice.id;
+    const std::wstring targetId = st->selectedTargetDevice.id.empty()
+                                      ? st->persistedTargetDeviceId
+                                      : st->selectedTargetDevice.id;
+    const int sourceDevice = FindDeviceSelection(st->devices, sourceId);
+    const int targetDevice = FindDeviceSelection(st->devices, targetId);
+    int source = sourceDevice;
+    int target = targetDevice;
+    if (source == CB_ERR && !st->selectedSourceDevice.id.empty()) {
+        source = addUnavailable(st->hCmbSource, st->selectedSourceDevice);
+    }
+    if (target == CB_ERR && !st->selectedTargetDevice.id.empty()) {
+        target = addUnavailable(st->hCmbTarget, st->selectedTargetDevice);
+    }
     SendMessageW(st->hCmbSource, CB_SETCURSEL, source, 0);
     SendMessageW(st->hCmbTarget, CB_SETCURSEL, target, 0);
+
+    if (sourceDevice != CB_ERR) {
+        st->selectedSourceDevice.id = sourceId;
+        st->selectedSourceDevice.displayName =
+            Utf8ToWide(st->devices[static_cast<size_t>(sourceDevice)].name);
+    }
+    if (targetDevice != CB_ERR) {
+        st->selectedTargetDevice.id = targetId;
+        st->selectedTargetDevice.displayName =
+            Utf8ToWide(st->devices[static_cast<size_t>(targetDevice)].name);
+    }
 
     if (!st->selectedSourceDevice.id.empty() && source == CB_ERR) {
         WB_LOG_WARN("Auto-rescan: source device unavailable; placeholder retained.");
