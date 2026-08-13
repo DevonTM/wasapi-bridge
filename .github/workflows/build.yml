@@ -50,11 +50,12 @@ jobs:
       shell: pwsh
       run: |
         $DIR = "wasapi-bridge-${{ steps.version.outputs.version }}-${{ matrix.name }}"
-        mkdir $DIR
-        Copy-Item build\Release\wasapi-bridge.exe -Destination $DIR\
-        Copy-Item config.example.ini -Destination "$DIR\config.ini"
-        Copy-Item LICENSE -Destination $DIR\
-        Compress-Archive -Path "$DIR" -DestinationPath "$DIR.zip"
+        $ZIP = "${DIR}.zip"
+        New-Item -ItemType Directory -Path $DIR | Out-Null
+        Copy-Item build\Release\wasapi-bridge.exe -Destination $DIR
+        Copy-Item config.example.ini -Destination (Join-Path $DIR "config.ini")
+        Copy-Item LICENSE -Destination $DIR
+        Compress-Archive -Path $DIR -DestinationPath $ZIP
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
