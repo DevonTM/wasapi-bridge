@@ -334,6 +334,71 @@ void RescanDevices(AppState* st) {
     RefreshBridgeTabState(st);
 }
 
+namespace {
+
+int FindDeviceSelection(const std::vector<DeviceEntry>& devices,
+                        const std::wstring& wanted) {
+    if (wanted.empty()) return CB_ERR;
+    for (size_t i = 0; i < devices.size(); ++i) {
+        if (std::wstring(devices[i].id.wasapi) == wanted) {
+            return static_cast<int>(i);
+        }
+    }
+    return CB_ERR;
+}
+
+std::wstring SelectedDeviceId(AppState* st, HWND combo,
+                              const std::wstring& retained) {
+    int index = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
+    if (index >= 0 && static_cast<size_t>(index) < st->devices.size()) {
+        return std::wstring(st->devices[static_cast<size_t>(index)].id.wasapi);
+    }
+    return retained;
+}
+
+} // namespace
+
+void RestoreSettings(AppState* st, const Settings& settings) {
+    st->persistedSourceDeviceId = settings.sourceDeviceId;
+    st->persistedTargetDeviceId = settings.targetDeviceId;
+    st->modeIsExclusive = settings.exclusiveMode;
+    st->latencyShared = settings.sharedLatency;
+    st->latencyExclusive = settings.exclusiveLatency;
+    st->minimizeToTray = settings.minimizeToTray;
+
+    int source = FindDeviceSelection(st->devices, settings.sourceDeviceId);
+    int target = FindDeviceSelection(st->devices, settings.targetDeviceId);
+    SendMessageW(st->hCmbSource, CB_SETCURSEL, source, 0);
+    SendMessageW(st->hCmbTarget, CB_SETCURSEL, target, 0);
+    SendMessageW(st->hRadShared, BM_SETCHECK,
+                 settings.exclusiveMode ? BST_UNCHECKED : BST_CHECKED, 0);
+    SendMessageW(st->hRadExclusive, BM_SETCHECK,
+                 settings.exclusiveMode ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(st->hChkTray, BM_SETCHECK,
+                 settings.minimizeToTray ? BST_CHECKED : BST_UNCHECKED, 0);
+    WriteLatencyEdit(st);
+    RefreshBridgeTabState(st);
+}
+
+void SaveCurrentSettings(AppState* st) {
+    int currentLatency = ReadLatencyEdit(st);
+    if (st->modeIsExclusive) st->latencyExclusive = currentLatency;
+    else                     st->latencyShared = currentLatency;
+
+    Settings settings;
+    settings.sourceDeviceId = SelectedDeviceId(st, st->hCmbSource,
+                                               st->persistedSourceDeviceId);
+    settings.targetDeviceId = SelectedDeviceId(st, st->hCmbTarget,
+                                               st->persistedTargetDeviceId);
+    settings.exclusiveMode = st->modeIsExclusive;
+    settings.sharedLatency = st->latencyShared;
+    settings.exclusiveLatency = st->latencyExclusive;
+    settings.minimizeToTray = st->minimizeToTray;
+    SaveSettings(settings);
+    st->persistedSourceDeviceId = settings.sourceDeviceId;
+    st->persistedTargetDeviceId = settings.targetDeviceId;
+}
+
 int ReadLatencyEdit(AppState* st) {
     // Single sanitize rule used everywhere:
     //   empty / 0 / < 1  -> mode default (the user cleared it or typed 0)
@@ -495,7 +560,15 @@ bool HandleBridgeCommand(AppState* st, WORD ctrlId, WORD notifyCode) {
         case IDC_CMB_SOURCE:
         case IDC_CMB_TARGET:
             if (notifyCode == CBN_SELCHANGE) {
+                HWND combo = ctrlId == IDC_CMB_SOURCE ? st->hCmbSource : st->hCmbTarget;
+                int index = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
+                if (index >= 0 && static_cast<size_t>(index) < st->devices.size()) {
+                    std::wstring id(st->devices[static_cast<size_t>(index)].id.wasapi);
+                    if (ctrlId == IDC_CMB_SOURCE) st->persistedSourceDeviceId = id;
+                    else st->persistedTargetDeviceId = id;
+                }
                 RefreshBridgeTabState(st);
+                SaveCurrentSettings(st);
                 return true;
             }
             break;
@@ -515,6 +588,7 @@ bool HandleBridgeCommand(AppState* st, WORD ctrlId, WORD notifyCode) {
                 else                     st->latencyShared    = prev;
                 st->modeIsExclusive = nowExcl;
                 WriteLatencyEdit(st);
+                SaveCurrentSettings(st);
                 return true;
             }
             break;
@@ -527,17 +601,19 @@ bool HandleBridgeCommand(AppState* st, WORD ctrlId, WORD notifyCode) {
         case IDC_CHK_MIN_TRAY:
             if (notifyCode == BN_CLICKED) {
                 st->minimizeToTray = (SendMessageW(st->hChkTray, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                SaveCurrentSettings(st);
                 return true;
             }
             break;
-        // No EN_* handling for the latency edit: we deliberately do NOT
-        // normalize on focus loss. Doing so caused a visible double-commit
-        // flash when clicking a radio or Start while the field had focus
-        // (KILLFOCUS rewrote the box, then the radio/Start handler rewrote it
-        // again). Normalization happens at the points that matter instead:
-        // the mode-switch handler (reads fresh via ReadLatencyEdit) and Start
-        // (CommitLatency). Raw text may linger until then, but the value used
-        // is always sanitized when read.
+        case IDC_EDT_LATENCY:
+            if (notifyCode == EN_KILLFOCUS) {
+                CommitLatency(st);
+                return true;
+            }
+            break;
+        // Do not normalize the latency edit per keystroke. Commit when focus
+        // loss so the value is persisted without fighting live typing. The
+        // mode-switch and Start paths also commit before using the value.
     }
     return false;
 }
@@ -606,6 +682,9 @@ void ToggleBridge(AppState* st) {
     // losing focus (e.g. typed then clicked, or activated by keyboard).
     CommitLatency(st);
     cfg.targetLatency = static_cast<ma_uint32>(ReadLatencyEdit(st));
+    st->persistedSourceDeviceId = std::wstring(st->devices[static_cast<size_t>(srcSel)].id.wasapi);
+    st->persistedTargetDeviceId = std::wstring(st->devices[static_cast<size_t>(tgtSel)].id.wasapi);
+    SaveCurrentSettings(st);
 
     WB_LOG_INFO("Starting bridge: source=\"%s\" target=\"%s\" mode=%s latency=%u ms",
                 st->devices[static_cast<size_t>(srcSel)].name.c_str(),

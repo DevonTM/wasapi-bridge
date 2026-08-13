@@ -42,6 +42,7 @@ set(PROJECT_SOURCES
     src/gui/log_tab.cpp
     src/gui/logger.cpp
     src/gui/main_window.cpp
+    src/gui/settings.cpp
     src/gui/tray.cpp
     src/gui/ui_utils.cpp
 )

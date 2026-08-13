@@ -67,6 +67,9 @@ struct AppState {
     // App data
     std::unique_ptr<BridgeService> bridge;
     std::vector<DeviceEntry>       devices;
+    // Keep requested IDs even when a device is temporarily absent.
+    std::wstring persistedSourceDeviceId;
+    std::wstring persistedTargetDeviceId;
     int latencyShared    = 10;
     int latencyExclusive = 5;
     bool modeIsExclusive = false;  // tracks which radio is currently active

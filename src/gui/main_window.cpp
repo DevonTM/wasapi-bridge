@@ -12,6 +12,7 @@
 #include "log_tab.h"
 #include "logger.h"
 #include "resource.h"
+#include "settings.h"
 #include "tray.h"
 #include "ui_utils.h"
 
@@ -297,8 +298,10 @@ void OnCreate(HWND hwnd, AppState* st) {
     ShowWindow(st->panels[1], SW_HIDE);
     ShowWindow(st->panels[2], SW_HIDE);
 
-    // Initial device scan + log rehydrate so the GUI has data on first paint.
+    // Enumerate first, then load once so saved IDs can be matched without
+    // generating command notifications or writing settings during startup.
     RescanDevices(st);
+    RestoreSettings(st, LoadSettings());
     RehydrateLogControl(st);
 
     // No explicit initial SetFocus call is needed: with WS_EX_CONTROLPARENT on
@@ -610,6 +613,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_DESTROY:
             if (st) {
+                SaveCurrentSettings(st);
                 Logger::Instance().SetNotifyWindow(nullptr, 0);
                 TrayHide(st);
                 KillTimer(hwnd, kStateTimerId);
