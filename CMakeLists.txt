@@ -106,6 +106,7 @@ endif()
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE
         ole32 uuid
+        mmdevapi
         comctl32
         gdi32 user32
         shell32 comdlg32

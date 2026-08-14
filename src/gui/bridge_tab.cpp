@@ -504,8 +504,10 @@ void ResetSettingsToDefaults(AppState* st) {
 
     // These direct control updates do not emit the user command notifications
     // handled below, so reset cannot recurse into SaveCurrentSettings.
-    SendMessageW(st->hCmbSource, CB_SETCURSEL, CB_ERR, 0);
-    SendMessageW(st->hCmbTarget, CB_SETCURSEL, CB_ERR, 0);
+    SendMessageW(st->hCmbSource, CB_SETCURSEL,
+                 static_cast<WPARAM>(CB_ERR), 0);
+    SendMessageW(st->hCmbTarget, CB_SETCURSEL,
+                 static_cast<WPARAM>(CB_ERR), 0);
     SendMessageW(st->hRadShared, BM_SETCHECK, BST_CHECKED, 0);
     SendMessageW(st->hRadExclusive, BM_SETCHECK, BST_UNCHECKED, 0);
     SendMessageW(st->hChkTray, BM_SETCHECK, BST_CHECKED, 0);
