@@ -101,8 +101,8 @@ void DoExport(AppState* st) {
     auto lines = Logger::Instance().Snapshot();
     std::ofstream out(fileBuf, std::ios::binary);
     if (!out) {
-        MessageBoxW(st->hMain, L"Failed to open file for writing.",
-                    L"Export log", MB_OK | MB_ICONERROR);
+        ShowError(st->hMain, L"Failed to open file for writing.",
+                  L"Export log");
         return;
     }
     // Plain UTF-8, no BOM. The log content is ASCII/UTF-8 already, so a BOM

@@ -397,11 +397,10 @@ void OnLogPushed(AppState* st) {
 
 bool ConfirmExitWhileRunning(AppState* st) {
     if (!st->bridge || !st->bridge->IsRunning()) return true;
-    int rc = MessageBoxW(st->hMain,
-                         L"The bridge is still running.\n"
-                         L"Stop it and exit?",
-                         L"WASAPI Bridge",
-                         MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+    int rc = ShowQuestion(st->hMain,
+                          L"The bridge is still running.\n"
+                          L"Stop it and exit?",
+                          L"WASAPI Bridge");
     return rc == IDYES;
 }
 

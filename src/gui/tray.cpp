@@ -4,10 +4,13 @@
 #include <cstdio>
 
 #include "resource.h"
+#include "ui_utils.h"
 
 namespace wb {
 
 namespace {
+
+using UniqueMenu = UniqueWin32Handle<HMENU, DestroyMenuHandle>;
 
 constexpr UINT kTrayId = 1;
 
@@ -61,21 +64,20 @@ void TrayUpdateTooltip(AppState* st) {
 }
 
 void TrayPopupMenu(AppState* st, POINT screenPt) {
-    HMENU menu = CreatePopupMenu();
+    UniqueMenu menu(CreatePopupMenu());
     if (!menu) return;
-    AppendMenuW(menu, MF_STRING, IDM_TRAY_OPEN, L"Open WASAPI Bridge");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, IDM_TRAY_EXIT, L"Exit");
-    SetMenuDefaultItem(menu, IDM_TRAY_OPEN, FALSE);
+    AppendMenuW(menu.get(), MF_STRING, IDM_TRAY_OPEN, L"Open WASAPI Bridge");
+    AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu.get(), MF_STRING, IDM_TRAY_EXIT, L"Exit");
+    SetMenuDefaultItem(menu.get(), IDM_TRAY_OPEN, FALSE);
 
     // Per the docs, you must SetForegroundWindow before TrackPopupMenu and
     // post a dummy message after, otherwise the menu won't dismiss properly
     // when the user clicks outside it.
     SetForegroundWindow(st->hMain);
-    TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
+    TrackPopupMenu(menu.get(), TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
                    screenPt.x, screenPt.y, 0, st->hMain, nullptr);
     PostMessageW(st->hMain, WM_NULL, 0, 0);
-    DestroyMenu(menu);
 }
 
 } // namespace wb

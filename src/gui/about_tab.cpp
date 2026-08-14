@@ -260,11 +260,10 @@ bool HandleAboutCommand(AppState* st, WORD ctrlId, WORD notifyCode) {
         return true;
     }
     if (ctrlId == IDC_BTN_RESET_SETTINGS && notifyCode == BN_CLICKED) {
-        int result = MessageBoxW(st->hMain,
-                                 L"Reset all settings to defaults?\n\n"
-                                 L"If the bridge is running, it will be stopped.",
-                                 L"Reset settings",
-                                 MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+        int result = ShowQuestion(st->hMain,
+                                  L"Reset all settings to defaults?\n\n"
+                                  L"If the bridge is running, it will be stopped.",
+                                  L"Reset settings");
         if (result == IDYES) {
             ResetSettingsToDefaults(st);
         }

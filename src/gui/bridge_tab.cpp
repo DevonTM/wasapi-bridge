@@ -798,9 +798,9 @@ void ToggleBridge(AppState* st) {
     int srcSel = ComboDeviceIndex(st, st->hCmbSource);
     int tgtSel = ComboDeviceIndex(st, st->hCmbTarget);
     if (srcSel == CB_ERR || tgtSel == CB_ERR || srcSel == tgtSel) {
-        MessageBoxW(st->hMain,
-                    L"Please pick available, distinct Source and Target devices first.",
-                    L"WASAPI Bridge", MB_OK | MB_ICONINFORMATION);
+        ShowInfo(st->hMain,
+                 L"Please pick available, distinct Source and Target devices first.",
+                 L"WASAPI Bridge");
         return;
     }
 
@@ -813,16 +813,16 @@ void ToggleBridge(AppState* st) {
     // Validate target's advertised mode the same way the CLI did.
     const auto& tgt = st->devices[static_cast<size_t>(tgtSel)];
     if (excl && !tgt.supportsExclusive) {
-        MessageBoxW(st->hMain,
+        ShowWarning(st->hMain,
                     L"Target device doesn't advertise exclusive mode.\n"
                     L"Pick a different target or switch to Shared.",
-                    L"WASAPI Bridge", MB_OK | MB_ICONWARNING);
+                    L"WASAPI Bridge");
         return;
     }
     if (!excl && !tgt.supportsShared) {
-        MessageBoxW(st->hMain,
+        ShowWarning(st->hMain,
                     L"Target device doesn't advertise shared mode.",
-                    L"WASAPI Bridge", MB_OK | MB_ICONWARNING);
+                    L"WASAPI Bridge");
         return;
     }
 
@@ -843,9 +843,9 @@ void ToggleBridge(AppState* st) {
                 cfg.targetLatency);
 
     if (!st->bridge->Start(cfg)) {
-        MessageBoxW(st->hMain,
-                    L"Failed to start the bridge. See the Log tab for details.",
-                    L"WASAPI Bridge", MB_OK | MB_ICONERROR);
+        ShowError(st->hMain,
+                  L"Failed to start the bridge. See the Log tab for details.",
+                  L"WASAPI Bridge");
     } else {
         // Arm the deferred focus move: once the worker reaches Running and the
         // state timer re-enables the toggle button, RefreshBridgeTabState will

@@ -112,6 +112,22 @@ void ApplyUiFont(HWND control, HFONT font) {
                  MAKELPARAM(TRUE, 0));
 }
 
+int ShowInfo(HWND owner, const wchar_t* message, const wchar_t* title) {
+    return MessageBoxW(owner, message, title, MB_OK | MB_ICONINFORMATION);
+}
+
+int ShowWarning(HWND owner, const wchar_t* message, const wchar_t* title) {
+    return MessageBoxW(owner, message, title, MB_OK | MB_ICONWARNING);
+}
+
+int ShowError(HWND owner, const wchar_t* message, const wchar_t* title) {
+    return MessageBoxW(owner, message, title, MB_OK | MB_ICONERROR);
+}
+
+int ShowQuestion(HWND owner, const wchar_t* message, const wchar_t* title, UINT buttons) {
+    return MessageBoxW(owner, message, title, buttons | MB_ICONQUESTION);
+}
+
 static BOOL CALLBACK ApplyFontEnumProc(HWND child, LPARAM lParam) {
     HFONT font = reinterpret_cast<HFONT>(lParam);
     SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), MAKELPARAM(TRUE, 0));
