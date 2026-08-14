@@ -1,6 +1,5 @@
 #include "device_notifications.h"
 
-#include <initguid.h>
 #include <mmdeviceapi.h>
 
 #include <atomic>
@@ -8,6 +7,17 @@
 #include "logger.h"
 
 namespace wb {
+namespace {
+
+// Keep the MMDevice enumerator CLSID local instead of relying on the SDK's
+// external DEFINE_GUID symbol, which is not consistently provided by all
+// MSVC Windows SDK/linker combinations.
+constexpr CLSID kMmDeviceEnumeratorClsid{
+    0xbcde0395, 0xe52f, 0x467c,
+    {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}
+};
+
+} // namespace
 
 class DeviceNotificationMonitor::Client final : public IMMNotificationClient {
 public:
@@ -90,7 +100,7 @@ bool DeviceNotificationMonitor::Start(HWND notifyWindow, UINT notifyMessage) {
     comInitialized_ = true;
 
     IMMDeviceEnumerator* enumerator = nullptr;
-    hr = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_INPROC_SERVER,
+    hr = CoCreateInstance(kMmDeviceEnumeratorClsid, nullptr, CLSCTX_INPROC_SERVER,
                           IID_PPV_ARGS(&enumerator));
     if (FAILED(hr)) {
         WB_LOG_WARN("Audio device notifications unavailable: MMDeviceEnumerator creation failed (0x%08lx).",
