@@ -399,8 +399,8 @@ bool ConfirmExitWhileRunning(AppState* st) {
     if (!st->bridge || !st->bridge->IsRunning()) return true;
     int rc = ShowQuestion(st->hMain,
                           L"The bridge is still running.\n"
-                          L"Stop it and exit?",
-                          L"WASAPI Bridge");
+                          L"Stop the bridge and exit the application?",
+                          L"Exit");
     return rc == IDYES;
 }
 
